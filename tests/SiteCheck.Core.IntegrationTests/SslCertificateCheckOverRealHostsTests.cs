@@ -10,9 +10,7 @@ namespace SiteCheck.Core.IntegrationTests;
 /// </summary>
 public sealed class SslCertificateCheckOverRealHostsTests
 {
-    [Fact(Skip = "Fails until joanp6/sitecheck#1 is fixed. Written against the correct behaviour on " +
-                 "purpose: asserting today's wrong message would bless the bug and make the fix look " +
-                 "like a regression. https://github.com/joanp6/sitecheck/issues/1")]
+    [Fact]
     public async Task RunAsync_WhenTheCertificateHasExpired_SaysSoInsteadOfBlamingTheChain()
     {
         IntegrationGate.RequireEnabled();
@@ -26,9 +24,12 @@ public sealed class SslCertificateCheckOverRealHostsTests
 
         Assert.Equal(CheckStatus.Fail, outcome.Status);
 
-        // The certificate expired on 2015-04-13 and has not moved since, so this date is
-        // safe to pin. What the check says today is "its chain is not valid", which sends
-        // the site owner to change the wrong thing.
-        Assert.Contains("expired on 2015-04-13", outcome.Detail, StringComparison.Ordinal);
+        // 2015-04-12T23:59:59 UTC, and it has not moved since, so the date is safe to pin.
+        // Note the day: this test first asserted 2015-04-13, the value that shows up when
+        // the certificate is read in a UTC+2 timezone. The check reports UTC, so that
+        // assertion would have passed in Madrid and failed on a UTC runner. Reading a date
+        // off a local-time debug print is how you write a test that only holds in one
+        // timezone.
+        Assert.Contains("expired on 2015-04-12", outcome.Detail, StringComparison.Ordinal);
     }
 }
