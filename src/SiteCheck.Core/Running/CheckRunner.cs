@@ -71,6 +71,7 @@ public sealed class CheckRunner
             check.Name,
             outcome.Status,
             outcome.Detail,
-            _timeProvider.GetElapsedTime(startedAt));
+            _timeProvider.GetElapsedTime(startedAt),
+            outcome.ValidUntil);
     }
 }

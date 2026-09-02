@@ -26,6 +26,33 @@ public sealed class CheckRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_CarriesTheOutcomeValuesThroughToTheResult()
+    {
+        // The runner adds the name and the timing; it must not quietly drop anything the
+        // check reported as a value. Detail is prose, ValidUntil is the data behind it.
+        var expiry = new DateTimeOffset(2026, 4, 15, 12, 0, 0, TimeSpan.Zero);
+        var runner = new CheckRunner(
+            [StubCheck.Returning("ssl", CheckOutcome.Warn("Expires soon.") with { ValidUntil = expiry })],
+            new FakeTimeProvider());
+
+        var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expiry, results[0].ValidUntil);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenACheckReportsNoExpiry_LeavesItUnset()
+    {
+        var runner = new CheckRunner(
+            [StubCheck.Returning("load-time", CheckOutcome.Pass("Fast."))],
+            new FakeTimeProvider());
+
+        var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Null(results[0].ValidUntil);
+    }
+
+    [Fact]
     public async Task RunAsync_WithNoRegisteredChecks_ReturnsNothing()
     {
         var runner = new CheckRunner([], new FakeTimeProvider());

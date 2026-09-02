@@ -1,0 +1,16 @@
+root = true
+
+[*.cs]
+
+# The culture of the process must never reach a value we render into a report. The same
+# check has to produce the same bytes on a Spanish laptop and on a UTC Linux runner, and
+# "we remembered to pass InvariantCulture" is not a guarantee, it is a habit. These are
+# errors rather than warnings for the same reason the build treats warnings as errors:
+# a rule nobody is forced to obey is a rule that decays.
+#
+# Not hypothetical. es-ES and en-US agree on plenty; ar-SA renders DateTime with the
+# Umm al-Qura calendar, and a report generated there would carry a different year.
+dotnet_diagnostic.CA1304.severity = error  # Specify CultureInfo
+dotnet_diagnostic.CA1305.severity = error  # Specify IFormatProvider
+dotnet_diagnostic.CA1310.severity = error  # Specify StringComparison for correctness
+dotnet_diagnostic.CA1311.severity = error  # Specify a culture or use an invariant version
