@@ -69,18 +69,42 @@ public sealed class CheckRunnerTests
         Assert.Equal(1, survivor.Invocations);
     }
 
+    // The two tests below are a pair, and only mean something together. They pin the
+    // distinction the filter on CheckRunner's catch clause exists to draw: a cancellation
+    // nobody asked for is one stuck check, while a cancellation the caller asked for is the
+    // end of the run. Collapse the catch into a plain `catch (Exception)` and the first
+    // still passes; collapse it the other way, rethrowing every OperationCanceledException,
+    // and one slow site aborts the whole audit and takes the other twenty-five results
+    // with it. That is the failure these guard against.
+
     [Fact]
-    public async Task RunAsync_WhenACheckTimesOutInternally_RecordsAnErrorRatherThanAbortingTheRun()
+    public async Task RunAsync_WhenACheckCancelsItselfWhileTheRunIsHealthy_RecordsAnErrorAndKeepsGoing()
     {
-        // A cancellation nobody asked for is a stuck check, not a cancelled run.
+        var survivor = StubCheck.Returning("next", CheckOutcome.Pass("ok"));
         var runner = new CheckRunner(
-            [StubCheck.Throwing("stuck", new OperationCanceledException()), StubCheck.Returning("next", CheckOutcome.Pass("ok"))],
+            [StubCheck.Throwing("stuck", new OperationCanceledException()), survivor],
             new FakeTimeProvider());
 
         var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
 
+        Assert.Equal(2, results.Count);
         Assert.Equal(CheckStatus.Error, results[0].Status);
         Assert.Equal(CheckStatus.Pass, results[1].Status);
+        Assert.Equal(1, survivor.Invocations);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenACheckThrowsAfterTheCallerCancelled_PropagatesInsteadOfRecordingAnError()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var skipped = StubCheck.Returning("skipped", CheckOutcome.Pass("ok"));
+        var runner = new CheckRunner(
+            [StubCheck.CancellingAndThrowing("canceller", cancellation), skipped],
+            new FakeTimeProvider());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(Site, cancellation.Token));
+
+        Assert.Equal(0, skipped.Invocations);
     }
 
     [Fact]

@@ -1,0 +1,86 @@
+name: build
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Never cancel the other leg. The whole point of running both is to see when the
+      # two platforms disagree, and a cancelled job tells us nothing about which.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the SDK pinned in global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          # Central package management means Directory.Packages.props holds every version,
+          # so it plus the project files describe the restore completely.
+          key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # Runs the unit suite and enforces the coverage floor. Calling the script rather than
+      # repeating `dotnet test` here keeps one definition of what CI checks: change the
+      # script and CI changes with it, and what fails here can be reproduced locally with
+      # the same command. It also runs the suite exactly once.
+      - name: Test with coverage
+        shell: pwsh
+        run: ./scripts/coverage.ps1
+
+      - name: Publish coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.os }}
+          path: TestResults/coverage.cobertura.xml
+          if-no-files-found: warn
+
+  integration-tests:
+    name: Integration tests (${{ matrix.os }})
+    # Manual only. These open real sockets to hosts nobody here controls, so an outage
+    # elsewhere would turn a pull request red for a reason unrelated to the commit.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    env:
+      SITECHECK_INTEGRATION: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the SDK pinned in global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # Both platforms on purpose: Windows completes a broken certificate chain over AIA
+      # where OpenSSL does not, so this is where that divergence shows up. See
+      # docs/testing.md.
+      - name: Run integration tests
+        run: dotnet test tests/SiteCheck.Core.IntegrationTests

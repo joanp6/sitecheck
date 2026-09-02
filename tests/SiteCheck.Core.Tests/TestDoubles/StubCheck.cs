@@ -42,6 +42,17 @@ internal sealed class StubCheck : ISiteCheck
             return CheckOutcome.Pass("Done, then cancelled.");
         });
 
+    /// <summary>
+    /// A check that cancels the run and then throws, the way a check with a deadline of
+    /// its own behaves once the caller's deadline has fired.
+    /// </summary>
+    public static StubCheck CancellingAndThrowing(string name, CancellationTokenSource source) =>
+        new(name, () =>
+        {
+            source.Cancel();
+            throw new OperationCanceledException(source.Token);
+        });
+
     public Task<CheckOutcome> RunAsync(Uri url, CancellationToken cancellationToken = default)
     {
         Invocations++;

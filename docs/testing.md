@@ -73,23 +73,33 @@ going red. The floor is there to catch a collapse — a suite quietly disabled, 
 with no tests at all — and nothing finer than that. The thing worth reading is the per-type
 table the script prints, not the total.
 
-### Known gaps
+### Two gaps that were reported before being closed
 
-Listed so they stay visible instead of being rounded away by a healthy-looking total. Neither
-has been filled, because a test written to close a coverage gap tends to assert whatever the
-code already happens to do:
+Coverage found two uncovered spots. Neither was closed by writing a test that runs the line;
+each was closed, or not, on its own merits. Recorded here because the reasoning is the part
+worth keeping.
 
-- **`CheckRunner.RunOneAsync`** — the `catch (OperationCanceledException) when
-  (cancellationToken.IsCancellationRequested) { throw; }` path, reached only when a check
-  itself throws while the caller's token is already cancelled. The existing cancellation test
-  cancels *between* checks, so the loop guard fires first and this branch never runs.
-- **`LoadTimeCheck.Name` and `SslCertificateCheck.Name`** — never read by a unit test, because
-  the runner tests use stubs. A typo in either identifier would ship unnoticed.
+**The cancellation pair in `CheckRunner.RunOneAsync`** — covered now, by two tests that only
+mean anything together. The filter on that `catch` separates "the caller cancelled us" from "a
+check cancelled itself", which is what will happen once a check carries its own timeout. Someone
+simplifying it to a plain `catch (Exception)` breaks one direction; someone rethrowing every
+`OperationCanceledException` breaks the other, and then a single slow site aborts the audit and
+takes the other twenty-five results with it. The tests are named as a pair and carry that stake
+in a comment, so the next reader knows what they are protecting.
 
-### CI
+**`ISiteCheck.Name` on both real checks** — covered now, but not by asserting the constants.
+`Assert.Equal("load-time", check.Name)` restates the implementation, cannot fail except on a
+deliberate edit, and then fails without saying anything useful. The question worth asking was
+whether `Name` is a caption or an identifier. It is an identifier: it becomes the key a report
+is written against, the CSV column, and the field `watch` will join on to compare one week
+against the last. So `CheckNameTests` asserts properties of the whole set instead — every check
+in the assembly is listed, every name is unique, every name is a well-formed kebab-case
+identifier. That survives a deliberate rename, and it catches the bug that will actually happen
+one day: copying a check to write the next one and leaving the original's name behind, so two
+checks share a key and one silently overwrites the other's row.
 
-There is no CI pipeline in this repo yet. When one lands it should call `scripts/coverage.ps1`
-unchanged, so the floor is enforced by the same code that reports the number locally.
+Line coverage is 100 % again as a result. The floor stays at 70 anyway — the number is a
+consequence of the work, not the target of it.
 
 ## Why the integration tests are out of CI
 
