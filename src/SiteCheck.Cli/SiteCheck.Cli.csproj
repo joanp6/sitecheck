@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SiteCheck.Cli</RootNamespace>
+    <AssemblyName>sitecheck</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SiteCheck.Core\SiteCheck.Core.csproj" />
+  </ItemGroup>
+
+</Project>
