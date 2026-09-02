@@ -92,6 +92,33 @@ public sealed class SslCertificateCheckTests
         Assert.DoesNotContain("chain", outcome.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(90, SslPolicyErrors.None)]                                    // healthy
+    [InlineData(10, SslPolicyErrors.None)]                                    // expiring soon
+    [InlineData(-5, SslPolicyErrors.RemoteCertificateChainErrors)]            // expired
+    public async Task RunAsync_ReportsTheExpiryAsAValueWhateverTheVerdict(int daysFromNow, SslPolicyErrors policyErrors)
+    {
+        // The date has to be readable without parsing the sentence back apart, or the first
+        // reword of Detail breaks whatever was regexing it out. Every verdict that has seen
+        // a certificate carries it, not just the happy one.
+        var outcome = await RunAgainst(
+            validFrom: Now.AddDays(-300),
+            validUntil: Now.AddDays(daysFromNow),
+            policyErrors: policyErrors);
+
+        Assert.Equal(Now.AddDays(daysFromNow), outcome.ValidUntil);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenThereIsNoCertificateToInspect_ReportsNoExpiry()
+    {
+        var check = new SslCertificateCheck(FakeCertificateProvider.NeverCalled(), new FakeTimeProvider(Now));
+
+        var outcome = await check.RunAsync(new Uri("http://example.test/"), TestContext.Current.CancellationToken);
+
+        Assert.Null(outcome.ValidUntil);
+    }
+
     [Fact]
     public void TheFakeRefusesToDescribeAHandshakeThatCannotHappen()
     {
