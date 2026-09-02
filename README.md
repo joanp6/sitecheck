@@ -6,5 +6,6 @@ CLI that audits and monitors small-business websites: SSL, mobile, load time, br
 
 ## Testing
 
-`dotnet test` runs the unit suite. Coverage, the integration suite, and why the coverage floor
-is 70 % rather than 100 % are all in [docs/testing.md](docs/testing.md).
+`dotnet test` runs the unit suite. [docs/testing.md](docs/testing.md) covers the rest: the
+xUnit v3 / Microsoft.Testing.Platform setup and why `global.json` is required for it, the
+integration suite, and why the coverage floor is 70 % rather than 100 %.
