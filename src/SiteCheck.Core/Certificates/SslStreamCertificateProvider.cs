@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
@@ -12,6 +13,12 @@ namespace SiteCheck.Certificates;
 /// <see cref="ICertificateProvider"/> seam exists to isolate. It has no unit tests
 /// because there is no logic here to test without a real socket.
 /// </remarks>
+[ExcludeFromCodeCoverage(Justification =
+    "Not untested: tested by SiteCheck.Core.IntegrationTests over real sockets, which need " +
+    "outbound internet and so are excluded from the coverage run. Counting this type there " +
+    "would report as uncovered the one type whose tests are the most realistic in the repo, " +
+    "and the resulting red would push someone to write a fake unit test to silence it. " +
+    "Removing this attribute is only correct alongside removing that suite. See docs/testing.md.")]
 public sealed class SslStreamCertificateProvider : ICertificateProvider
 {
     public async Task<CertificateInfo> GetAsync(Uri url, CancellationToken cancellationToken = default)

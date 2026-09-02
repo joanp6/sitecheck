@@ -33,11 +33,63 @@ On PowerShell:
 $env:SITECHECK_INTEGRATION = "1"; dotnet test tests/SiteCheck.Core.IntegrationTests
 ```
 
-Coverage, per suite, so each number keeps its meaning:
+Coverage has its own single entry point — see [Coverage](#coverage) below.
+
+## Coverage
+
+One command, used both locally and in CI so that the two can never disagree:
 
 ```bash
-dotnet test tests/SiteCheck.Core.Tests --coverage --coverage-output-format cobertura
+powershell -ExecutionPolicy Bypass -File scripts/coverage.ps1
 ```
+
+On Linux and macOS, `pwsh scripts/coverage.ps1`.
+
+It runs the unit suite, writes `TestResults/coverage.cobertura.xml`, prints line coverage per
+type worst-first, and exits non-zero if the total falls below the floor. Pass
+`-MinimumLineCoverage 0` to report the number without enforcing anything.
+
+Today: **97.22 % lines, 100 % branches.**
+
+### What is measured, and what is not
+
+Only `tests/SiteCheck.Core.Tests`. The integration suite is left out **by construction** — the
+script never starts it — rather than by an exclude flag that someone has to remember to pass.
+
+`SslStreamCertificateProvider` is excluded **explicitly**, with
+`[ExcludeFromCodeCoverage(Justification = "…")]` on the type itself rather than a glob in a
+settings file, so the reason travels with the code and turns up in review when someone touches
+it. It is not untested — it has the most realistic tests in this repo, over real sockets, in a
+suite that cannot run in CI. Counting it here would print 0 % next to the one type whose
+testing we are most confident about, and that red would push someone to write a hollow unit
+test to silence it.
+
+### Why the floor is 70 % and not 100 %
+
+The number is high today because the core is small, not because the tests are good. A 100 %
+gate does not buy the next percent of quality; it buys a test that executes the next
+hard-to-test class without asserting anything, written for no reason except to stop the build
+going red. The floor is there to catch a collapse — a suite quietly disabled, a module landing
+with no tests at all — and nothing finer than that. The thing worth reading is the per-type
+table the script prints, not the total.
+
+### Known gaps
+
+Listed so they stay visible instead of being rounded away by a healthy-looking total. Neither
+has been filled, because a test written to close a coverage gap tends to assert whatever the
+code already happens to do:
+
+- **`CheckRunner.RunOneAsync`** — the `catch (OperationCanceledException) when
+  (cancellationToken.IsCancellationRequested) { throw; }` path, reached only when a check
+  itself throws while the caller's token is already cancelled. The existing cancellation test
+  cancels *between* checks, so the loop guard fires first and this branch never runs.
+- **`LoadTimeCheck.Name` and `SslCertificateCheck.Name`** — never read by a unit test, because
+  the runner tests use stubs. A typo in either identifier would ship unnoticed.
+
+### CI
+
+There is no CI pipeline in this repo yet. When one lands it should call `scripts/coverage.ps1`
+unchanged, so the floor is enforced by the same code that reports the number locally.
 
 ## Why the integration tests are out of CI
 
