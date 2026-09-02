@@ -13,6 +13,50 @@ Two suites, two different meanings when they go red.
 Fusing those two signals into one red/green light trains you to ignore red, which is why
 they are separate projects rather than two categories in one.
 
+## Toolchain
+
+The least obvious part of this repo, because none of it is what `dotnet new` hands you. Every
+piece below is load-bearing; removing any one of them stops `dotnet test` working entirely.
+
+**xUnit v3, not the v2 the template gives you.** `dotnet new xunit` on SDK 10.0.302 still
+scaffolds `xunit` 2.9.3. `Directory.Packages.props` pins `xunit.v3` 4.0.0 instead, and the
+migration was done by hand. v3 is the line under active development, and the two features this
+suite leans on — `Assert.Skip` / `SkipUnless` for the integration gate, and
+`TestContext.Current.CancellationToken` — do not exist in v2.
+
+**xUnit v3 does not run on VSTest under .NET 10.** It runs on Microsoft.Testing.Platform. That
+is why the test projects carry neither `Microsoft.NET.Test.Sdk` nor
+`xunit.runner.visualstudio`: both are VSTest infrastructure, and the template's versions of
+them were removed rather than upgraded. It is also why both test `.csproj` files set
+`<OutputType>Exe</OutputType>` — an MTP test project is a self-hosting executable that runs its
+own tests, not a library a runner loads.
+
+**`global.json` is not optional.** Its `"test": { "runner": "Microsoft.Testing.Platform" }`
+section is what opts `dotnet test` into MTP. Without it the build fails outright, before a
+single test runs:
+
+```
+error : Testing with VSTest target is no longer supported by Microsoft.Testing.Platform
+on .NET 10 SDK and later. If you use dotnet test, you should opt-in to the new dotnet
+test experience.
+```
+
+The official documentation points at a `dotnet.config` file with a `[dotnet.test.runner]`
+section for this. **On SDK 10.0.302 that does not work** — verified: with `dotnet.config`
+present and the `global.json` section removed, the error above is identical. Only `global.json`
+takes effect. If you are looking at the docs and wondering why your `dotnet.config` is being
+ignored, this is why.
+
+**Coverage uses `Microsoft.Testing.Extensions.CodeCoverage`, not `coverlet.collector`.** Same
+reason: coverlet.collector ships a VSTest data collector, and VSTest is the path we no longer
+travel. The template's `coverlet.collector` reference was removed with the rest of the VSTest
+packages.
+
+**`global.json` also pins the SDK** to `10.0.302` with `rollForward: latestPatch`, so patch
+releases inside the `10.0.3xx` band are accepted and a jump to `10.0.4xx` fails loudly instead
+of silently changing the toolchain underneath a stack this new. CI reads the same file:
+`actions/setup-dotnet` installs exactly that version rather than whatever the runner ships with.
+
 ## Running them
 
 Unit tests — this is what `dotnet test` does, and what CI runs:
