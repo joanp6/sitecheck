@@ -1,2 +1,10 @@
 # sitecheck
+
+[![build](https://github.com/joanp6/sitecheck/actions/workflows/ci.yml/badge.svg)](https://github.com/joanp6/sitecheck/actions/workflows/ci.yml)
+
 CLI that audits and monitors small-business websites: SSL, mobile, load time, broken links, form delivery
+
+## Testing
+
+`dotnet test` runs the unit suite. Coverage, the integration suite, and why the coverage floor
+is 70 % rather than 100 % are all in [docs/testing.md](docs/testing.md).

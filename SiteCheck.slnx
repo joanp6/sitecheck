@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SiteCheck.Cli/SiteCheck.Cli.csproj" />
+    <Project Path="src/SiteCheck.Core/SiteCheck.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SiteCheck.Core.IntegrationTests/SiteCheck.Core.IntegrationTests.csproj" />
+    <Project Path="tests/SiteCheck.Core.Tests/SiteCheck.Core.Tests.csproj" />
+  </Folder>
+</Solution>
