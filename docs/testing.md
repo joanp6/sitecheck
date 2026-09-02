@@ -176,15 +176,18 @@ produced on, so that two reports that disagree can be told apart from a regressi
 
 ## Currently skipped
 
-`SslCertificateCheckOverRealHostsTests.RunAsync_WhenTheCertificateHasExpired_SaysSoInsteadOfBlamingTheChain`
-is skipped pending [#1](https://github.com/joanp6/sitecheck/issues/1).
+Nothing. The one test that was — the expired-certificate case behind
+[#1](https://github.com/joanp6/sitecheck/issues/1) — now passes.
 
-It asserts the **correct** behaviour, not today's. Writing it against the current wrong message
-would have blessed the bug in the test suite and made the eventual fix look like a regression.
-It is a real, verified failure: unskipping it today produces
+It was written against the **correct** behaviour while the code was still wrong, and skipped
+with a link rather than written against the wrong message. Asserting what the code did at the
+time would have recorded the bug as intended behaviour and made the fix look like a regression.
+Worth repeating whenever a test has to land before its fix.
 
-```
-Assert.Contains() Failure: Sub-string not found
-String:    "Browsers will not trust the certificate for expire"···
-Not found: "expired on 2015-04-13"
-```
+### Dates in assertions are UTC
+
+That same test first asserted `expired on 2015-04-13`, a date read off a local-time debug print
+in a UTC+2 timezone. The certificate actually expires at `2015-04-12T23:59:59Z`, and the check
+reports UTC, so the assertion would have passed in Madrid and failed on a UTC runner — the
+same shape of problem as the platform divergence above, and just as annoying to diagnose. Pin
+dates from the UTC value, not from whatever a console printed locally.

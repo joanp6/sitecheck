@@ -55,15 +55,15 @@ public sealed class SslCertificateCheck : ISiteCheck
         var info = await _certificates.GetAsync(url, cancellationToken).ConfigureAwait(false);
         using var certificate = info.Certificate;
 
-        if (info.PolicyErrors != SslPolicyErrors.None)
-        {
-            return CheckOutcome.Fail($"Browsers will not trust the certificate for {url.Host}: {Describe(info.PolicyErrors)}.");
-        }
-
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var notBefore = certificate.NotBefore.ToUniversalTime();
         var notAfter = certificate.NotAfter.ToUniversalTime();
 
+        // Dates before policy errors, and the order matters. Expiry has no flag of its own:
+        // it reaches us as RemoteCertificateChainErrors, the same value an unknown issuer
+        // produces. Testing the policy errors first answers every expired certificate with
+        // the generic "chain is not valid", which sends the owner to replace the wrong
+        // thing. See https://github.com/joanp6/sitecheck/issues/1.
         if (now < notBefore)
         {
             return CheckOutcome.Fail($"The certificate is not valid until {Date(notBefore)}, so the site is unreachable over HTTPS today.");
@@ -72,6 +72,11 @@ public sealed class SslCertificateCheck : ISiteCheck
         if (now >= notAfter)
         {
             return CheckOutcome.Fail($"The certificate expired on {Date(notAfter)}, {WholeDaysBetween(notAfter, now)} day(s) ago.");
+        }
+
+        if (info.PolicyErrors != SslPolicyErrors.None)
+        {
+            return CheckOutcome.Fail($"Browsers will not trust the certificate for {url.Host}: {Describe(info.PolicyErrors)}.");
         }
 
         var daysLeft = WholeDaysBetween(now, notAfter);
