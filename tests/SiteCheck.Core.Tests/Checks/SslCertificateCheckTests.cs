@@ -12,16 +12,35 @@ public sealed class SslCertificateCheckTests
     private static readonly DateTimeOffset Now = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
     private static readonly Uri SecureSite = new("https://example.test/");
 
-    [Fact]
-    public async Task RunAsync_WhenTheSiteIsNotServedOverHttps_FailsWithoutConnecting()
+    [Theory]
+    [InlineData("http://example.test/", "https://example.test/")]
+    [InlineData("http://example.test/menu?x=1", "https://example.test/menu?x=1")]
+    [InlineData("http://example.test:8080/", "https://example.test/")]
+    public async Task RunAsync_WhenGivenAnHttpAddress_InspectsTheHttpsSiteInstead(string given, string inspected)
     {
-        var provider = FakeCertificateProvider.NeverCalled();
-        var check = new SslCertificateCheck(provider, new FakeTimeProvider(Now));
+        // Typing the address without the s must not grade a site that redirects correctly as
+        // having no certificate. Whether it redirects is https-redirect's finding, not this one's.
+        var clock = new FakeTimeProvider(Now);
+        var provider = FakeCertificateProvider.Presenting(
+            TestCertificates.ValidBetween(Now.AddDays(-30), Now.AddDays(90)), clock);
+
+        var outcome = await new SslCertificateCheck(provider, clock).RunAsync(new Uri(given), TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.Equal(new Uri(inspected), provider.LastUrl);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenAnHttpOnlySiteHasNoHttpsAtAll_Fails()
+    {
+        var check = new SslCertificateCheck(
+            FakeCertificateProvider.Failing(new SocketException((int)SocketError.ConnectionRefused)),
+            new FakeTimeProvider(Now));
 
         var outcome = await check.RunAsync(new Uri("http://example.test/"), TestContext.Current.CancellationToken);
 
         Assert.Equal(CheckStatus.Fail, outcome.Status);
-        Assert.Equal(0, provider.Invocations);
+        Assert.Contains("HTTPS", outcome.Detail, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -109,16 +128,6 @@ public sealed class SslCertificateCheckTests
             policyErrors: policyErrors);
 
         Assert.Equal(Now.AddDays(daysFromNow), outcome.ValidUntil);
-    }
-
-    [Fact]
-    public async Task RunAsync_WhenThereIsNoCertificateToInspect_ReportsNoExpiry()
-    {
-        var check = new SslCertificateCheck(FakeCertificateProvider.NeverCalled(), new FakeTimeProvider(Now));
-
-        var outcome = await check.RunAsync(new Uri("http://example.test/"), TestContext.Current.CancellationToken);
-
-        Assert.Null(outcome.ValidUntil);
     }
 
     [Fact]
