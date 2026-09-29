@@ -20,6 +20,10 @@ internal sealed class StubHttpMessageHandler : HttpMessageHandler
             return new HttpResponseMessage(status) { Content = new StringContent("<html lang=\"en\"></html>") };
         });
 
+    /// <summary>Serves exactly <paramref name="html"/>, for checks that read the page rather than time it.</summary>
+    public static StubHttpMessageHandler Serving(string html, HttpStatusCode status = HttpStatusCode.OK) =>
+        new(() => new HttpResponseMessage(status) { Content = new StringContent(html) });
+
     public static StubHttpMessageHandler Throwing(Exception exception) => new(() => throw exception);
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
