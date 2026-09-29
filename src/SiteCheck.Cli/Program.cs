@@ -36,6 +36,8 @@ httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("sitecheck/0.1 (+https://git
 var runner = new CheckRunner(
     [
         new SslCertificateCheck(new SslStreamCertificateProvider(), TimeProvider.System),
+        new HttpsRedirectCheck(httpClient),
+        new DomainExpiryCheck(httpClient, TimeProvider.System),
         new LoadTimeCheck(httpClient, TimeProvider.System),
         new MobileCheck(httpClient),
         new BrokenLinksCheck(httpClient),
