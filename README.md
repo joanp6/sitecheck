@@ -4,6 +4,50 @@
 
 CLI that audits and monitors small-business websites: SSL, mobile, load time, broken links, form delivery
 
+## Usage
+
+```bash
+dotnet run --project src/SiteCheck.Cli -- audit example.com
+```
+
+```text
+sitecheck report for https://example.com/
+
+  PASS   ssl-certificate  The certificate is valid until 2026-12-25 UTC, 87 day(s) from now.
+  PASS   load-time        The page loaded in 0.12 s.
+
+2 check(s): 2 passed, 0 warned, 0 failed, 0 errored.
+```
+
+The address can be a bare host (`example.com`, read as `https://example.com/`) or a full
+`http://` / `https://` URL.
+
+### Exit codes
+
+Scripts and CI can act on the result without parsing the report.
+
+| Code | Meaning |
+|------|---------|
+| 0 | Every check passed or only warned |
+| 1 | At least one check found a defect in the site |
+| 2 | A check could not be evaluated and nothing failed: a problem with sitecheck, not with the site |
+| 64 | Bad command line or address |
+| 130 | Cancelled with Ctrl+C |
+
+A defect wins over a tooling error: if both happen, the exit code is 1.
+
+### Checks
+
+| Check | Status | What it reports |
+|-------|--------|-----------------|
+| `ssl-certificate` | ✅ | Trusted, currently valid, and not within 30 days of expiry |
+| `load-time` | ✅ | Full page download: warns past 1.5 s, fails past 4 s |
+| mobile | planned | |
+| broken links | planned | |
+| form delivery | planned | |
+
+A host that cannot be reached is a `FAIL` in every check, never an `ERROR`.
+
 ## Testing
 
 `dotnet test` runs the unit suite. [docs/testing.md](docs/testing.md) covers the rest: the
