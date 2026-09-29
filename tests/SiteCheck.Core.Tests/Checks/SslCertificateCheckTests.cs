@@ -1,4 +1,6 @@
 using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Authentication;
 using Microsoft.Extensions.Time.Testing;
 using SiteCheck.Checks;
 using SiteCheck.Core.Tests.TestDoubles;
@@ -147,6 +149,40 @@ public sealed class SslCertificateCheckTests
 
         Assert.Equal(CheckStatus.Fail, outcome.Status);
         Assert.Contains(expectedReason, outcome.Detail, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<Exception> UnreachableHostFailures() =>
+    [
+        new SocketException((int)SocketError.HostNotFound),
+        new SocketException((int)SocketError.ConnectionRefused),
+        new TimeoutException("no answer"),
+        new AuthenticationException("handshake failed"),
+        new IOException("connection reset"),
+    ];
+
+    [Theory]
+    [MemberData(nameof(UnreachableHostFailures))]
+    public async Task RunAsync_WhenTheHostCannotBeReached_FailsInsteadOfReportingAToolError(Exception failure)
+    {
+        // Same dead site, same verdict as LoadTimeCheck. Error means "our tooling broke" and
+        // must never be shown to a customer as a defect; an unreachable site is theirs.
+        var check = new SslCertificateCheck(FakeCertificateProvider.Failing(failure), new FakeTimeProvider(Now));
+
+        var outcome = await check.RunAsync(SecureSite, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Fail, outcome.Status);
+        Assert.Null(outcome.ValidUntil);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenTheFailureIsUnexpected_StillPropagatesSoTheRunnerCanRecordAnError()
+    {
+        var check = new SslCertificateCheck(
+            FakeCertificateProvider.Failing(new InvalidOperationException("bug")),
+            new FakeTimeProvider(Now));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => check.RunAsync(SecureSite, TestContext.Current.CancellationToken));
     }
 
     [Fact]

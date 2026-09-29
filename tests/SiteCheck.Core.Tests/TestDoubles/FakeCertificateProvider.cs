@@ -10,8 +10,13 @@ namespace SiteCheck.Core.Tests.TestDoubles;
 internal sealed class FakeCertificateProvider : ICertificateProvider
 {
     private readonly CertificateInfo? _info;
+    private readonly Exception? _failure;
 
-    private FakeCertificateProvider(CertificateInfo? info) => _info = info;
+    private FakeCertificateProvider(CertificateInfo? info, Exception? failure = null)
+    {
+        _info = info;
+        _failure = failure;
+    }
 
     public int Invocations { get; private set; }
 
@@ -55,12 +60,24 @@ internal sealed class FakeCertificateProvider : ICertificateProvider
         return new FakeCertificateProvider(new CertificateInfo(certificate, policyErrors));
     }
 
+    /// <summary>A provider whose connection attempt throws <paramref name="failure"/>.</summary>
+    public static FakeCertificateProvider Failing(Exception failure)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+        return new FakeCertificateProvider(info: null, failure);
+    }
+
     /// <summary>A provider that fails loudly if the check tries to connect at all.</summary>
     public static FakeCertificateProvider NeverCalled() => new(info: null);
 
     public Task<CertificateInfo> GetAsync(Uri url, CancellationToken cancellationToken = default)
     {
         Invocations++;
+
+        if (_failure is not null)
+        {
+            throw _failure;
+        }
 
         return _info is null
             ? throw new InvalidOperationException("The check should not have asked for a certificate.")
