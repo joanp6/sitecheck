@@ -36,7 +36,9 @@ internal sealed class StubHttpMessageHandler : HttpMessageHandler
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        _requests.Enqueue($"{request.Method} {request.RequestUri}");
+        // AbsoluteUri, not ToString(): ToString() unescapes, so a test would see a different address
+        // from the one that goes over the wire.
+        _requests.Enqueue($"{request.Method} {request.RequestUri?.AbsoluteUri}");
 
         var response = _respond(request);
 

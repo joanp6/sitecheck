@@ -36,12 +36,19 @@ var outputOption = new Option<FileInfo?>("--output", "-o")
     Description = "Write the report to this file instead of the console.",
 };
 
+var pageSpeedOption = new Option<bool>("--pagespeed")
+{
+    Description = "Also ask Google PageSpeed Insights how fast each page feels on a phone. Sends the addresses to Google, "
+        + "takes up to a minute per site, and needs a free API key in SITECHECK_PAGESPEED_KEY. See docs/pagespeed.md.",
+};
+
 var audit = new Command("audit", "Audit one or more sites once and report what was found.")
 {
     urlsArgument,
     sitesOption,
     formatOption,
     outputOption,
+    pageSpeedOption,
 };
 
 audit.SetAction(async (parse, cancellationToken) =>
@@ -53,7 +60,7 @@ audit.SetAction(async (parse, cancellationToken) =>
         return ExitCodes.Usage;
     }
 
-    using var checks = new SiteChecks();
+    using var checks = new SiteChecks(includePageSpeed: parse.GetValue(pageSpeedOption));
 
     try
     {

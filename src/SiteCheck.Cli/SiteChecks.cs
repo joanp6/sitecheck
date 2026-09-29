@@ -9,10 +9,17 @@ namespace SiteCheck.Cli;
 /// </summary>
 internal sealed class SiteChecks : IDisposable
 {
+    public const string PageSpeedKeyVariable = "SITECHECK_PAGESPEED_KEY";
+
     private readonly HttpClient _httpClient;
     private readonly HttpClient _firstVisitClient;
+    private readonly HttpClient _pageSpeedClient;
 
-    public SiteChecks()
+    /// <param name="includePageSpeed">
+    /// Adds <see cref="PageSpeedCheck"/>, which sends each address to Google and takes up to a
+    /// minute per site, so it only runs when asked for.
+    /// </param>
+    public SiteChecks(bool includePageSpeed = false)
     {
         _httpClient = CreateClient(new SocketsHttpHandler());
 
@@ -23,16 +30,26 @@ internal sealed class SiteChecks : IDisposable
         // honest whatever order the checks run in.
         _firstVisitClient = CreateClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.Zero });
 
-        Runner = new CheckRunner(
-            [
-                new SslCertificateCheck(new SslStreamCertificateProvider(), TimeProvider.System),
-                new HttpsRedirectCheck(_httpClient),
-                new DomainExpiryCheck(_httpClient, TimeProvider.System),
-                new LoadTimeCheck(_firstVisitClient, TimeProvider.System),
-                new MobileCheck(_httpClient),
-                new BrokenLinksCheck(_httpClient),
-            ],
-            TimeProvider.System);
+        // Google loads the whole page in a throttled browser before it answers.
+        _pageSpeedClient = CreateClient(new SocketsHttpHandler(), TimeSpan.FromSeconds(120));
+
+        List<ISiteCheck> checks =
+        [
+            new SslCertificateCheck(new SslStreamCertificateProvider(), TimeProvider.System),
+            new HttpsRedirectCheck(_httpClient),
+            new DomainExpiryCheck(_httpClient, TimeProvider.System),
+            new LoadTimeCheck(_firstVisitClient, TimeProvider.System),
+            new MobileCheck(_httpClient),
+            new BrokenLinksCheck(_httpClient),
+            new ContactFormCheck(_httpClient),
+        ];
+
+        if (includePageSpeed)
+        {
+            checks.Add(new PageSpeedCheck(_pageSpeedClient, Environment.GetEnvironmentVariable(PageSpeedKeyVariable)));
+        }
+
+        Runner = new CheckRunner(checks, TimeProvider.System);
     }
 
     public CheckRunner Runner { get; }
@@ -41,11 +58,12 @@ internal sealed class SiteChecks : IDisposable
     {
         _httpClient.Dispose();
         _firstVisitClient.Dispose();
+        _pageSpeedClient.Dispose();
     }
 
-    private static HttpClient CreateClient(SocketsHttpHandler handler)
+    private static HttpClient CreateClient(SocketsHttpHandler handler, TimeSpan? timeout = null)
     {
-        var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+        var client = new HttpClient(handler) { Timeout = timeout ?? TimeSpan.FromSeconds(15) };
 
         // Many sites answer 403 to a request with no User-Agent, which would grade a healthy site as
         // broken because of us. Say who we are and where to read about it.
