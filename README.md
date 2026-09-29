@@ -16,8 +16,9 @@ sitecheck report for https://example.com/
   PASS   ssl-certificate  The certificate is valid until 2026-12-25 UTC, 87 day(s) from now.
   PASS   load-time        The page loaded in 0.12 s.
   PASS   mobile-viewport  The page declares a mobile viewport that follows the device width.
+  PASS   broken-links     All 1 link(s) on the page work.
 
-3 check(s): 3 passed, 0 warned, 0 failed, 0 errored.
+4 check(s): 4 passed, 0 warned, 0 failed, 0 errored.
 ```
 
 The address can be a bare host (`example.com`, read as `https://example.com/`) or a full
@@ -43,8 +44,8 @@ A defect wins over a tooling error: if both happen, the exit code is 1.
 |-------|--------|-----------------|
 | `ssl-certificate` | ✅ | Trusted, currently valid, and not within 30 days of expiry |
 | `load-time` | ✅ | Full page download: warns past 1.5 s, fails past 4 s |
-| `mobile-viewport` | ✅ | Declares `width=device-width` (or `initial-scale=1`); warns if it blocks pinch zoom. Reads the tag only: it does not render the page |
-| broken links | planned | |
+| `mobile-viewport` | ✅ | Declares `width=device-width` (or `initial-scale=1`); warns if it blocks pinch zoom. Reads the tag only: it does not render the page, and it sees the desktop version of sites that serve phones a different page |
+| `broken-links` | ✅ | Links on the page that lead nowhere: 404, 410, 5xx or no answer. Own pages fail, other sites warn. Follows the first 50 links, not the whole site; sites that refuse robots (403, 429) are reported as unverified, not broken |
 | form delivery | planned | |
 
 A host that cannot be reached is a `FAIL` in every check, never an `ERROR`.
