@@ -4,6 +4,7 @@ using SiteCheck.Cli;
 using SiteCheck.Reporting;
 using SiteCheck.Running;
 using SiteCheck.Sites;
+using SiteCheck.Watching;
 
 // The console front end depends on SiteCheck.Core, never the other way. This file only wires
 // arguments to the core and prints; every decision worth testing lives in the core.
@@ -75,7 +76,105 @@ audit.SetAction(async (parse, cancellationToken) =>
     }
 });
 
-var root = new RootCommand("sitecheck audits and monitors small-business websites.") { audit };
+var watchSitesOption = new Option<FileInfo>("--sites")
+{
+    Description = "A JSON file listing the sites to watch. See the README for its format.",
+    Required = true,
+};
+
+var stateOption = new Option<FileInfo>("--state")
+{
+    Description = "Where the history lives between runs. Created on the first run.",
+    Required = true,
+};
+
+var watch = new Command(
+    "watch",
+    "Audit every site, compare with the last run, and report what got worse or better. "
+    + "Exits 1 when something got worse, so a scheduler can raise the alarm. "
+    + "Set SITECHECK_TELEGRAM_TOKEN and SITECHECK_TELEGRAM_CHAT_ID to be messaged about changes.")
+{
+    watchSitesOption,
+    stateOption,
+};
+
+watch.SetAction(async (parse, cancellationToken) =>
+{
+    IReadOnlyList<Site> sites;
+    IReadOnlyList<SiteReport> previous;
+    var statePath = parse.GetRequiredValue(stateOption).FullName;
+
+    try
+    {
+        sites = await SiteList.LoadAsync(parse.GetRequiredValue(watchSitesOption).FullName, cancellationToken);
+        previous = await WatchState.LoadAsync(statePath, cancellationToken);
+    }
+    catch (Exception ex) when (ex is SiteListException or FormatException)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return ExitCodes.Usage;
+    }
+
+    var telegram = TelegramSettings.FromEnvironment();
+
+    if (telegram.Problem is not null)
+    {
+        Console.Error.WriteLine(telegram.Problem);
+        return ExitCodes.Usage;
+    }
+
+    using var checks = new SiteChecks();
+
+    try
+    {
+        var reports = new List<SiteReport>(sites.Count);
+
+        foreach (var site in sites)
+        {
+            reports.Add(await checks.Runner.AuditAsync(site, cancellationToken));
+        }
+
+        var comparison = WatchComparison.Of(previous, reports);
+
+        // Saved before anything that can fail, so a notification that does not get through cannot
+        // cost the history, and the next run still compares against today.
+        await WatchState.SaveAsync(statePath, comparison.History, cancellationToken);
+
+        var summary = WatchReport.RenderText(comparison);
+        Console.Write(summary);
+        Console.WriteLine();
+        Console.Write(ConsoleReport.Render(reports));
+
+        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } stepSummary)
+        {
+            await File.AppendAllTextAsync(stepSummary, WatchReport.RenderMarkdown(comparison), cancellationToken);
+        }
+
+        if (telegram.Notifier is { } notifier && comparison.Changes.Count > 0)
+        {
+            try
+            {
+                await notifier.SendAsync(summary, cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                // The alert is the point of watch, so failing to deliver one fails the run: a red
+                // run is the alarm of last resort.
+                Console.Error.WriteLine($"Could not send the Telegram message: {ex.Message}");
+                return ConsoleReport.ExitToolError;
+            }
+        }
+
+        return comparison.AnythingWorse ? ConsoleReport.ExitFailed : ConsoleReport.ExitOk;
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+        Console.Error.WriteLine("Cancelled. The history was left as it was.");
+        return ExitCodes.Cancelled;
+    }
+});
+
+var root = new RootCommand("sitecheck audits and monitors small-business websites.") { audit, watch };
 var parsed = root.Parse(args);
 
 if (parsed.Errors.Count > 0)

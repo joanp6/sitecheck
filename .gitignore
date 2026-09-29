@@ -427,3 +427,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Local watch history and sites list: they name the sites being watched, so never commit them.
+.sitecheck/
