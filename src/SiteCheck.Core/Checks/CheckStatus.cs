@@ -19,4 +19,16 @@ public enum CheckStatus
     /// not about the site, and must never be reported to a customer as a defect.
     /// </summary>
     Error,
+
+    /// <summary>
+    /// The question does not apply to this site, or the facts needed to answer it are not
+    /// published anywhere the check can read: a page with no form, a registry that does not
+    /// say when its domains expire. Says nothing about the site either way.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="Error"/> because nothing went wrong: asking again tomorrow
+    /// gives the same answer. Treating it as an error would fail every run for every site on a
+    /// registry that publishes no dates, and teach people to ignore the exit code.
+    /// </remarks>
+    Skip,
 }

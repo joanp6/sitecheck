@@ -57,7 +57,7 @@ public sealed class ConsoleReportTests
         Assert.Contains("All good.", text, StringComparison.Ordinal);
         Assert.Contains("FAIL", text, StringComparison.Ordinal);
         Assert.Contains("Too slow.", text, StringComparison.Ordinal);
-        Assert.Contains("2 check(s): 1 passed, 0 warned, 1 failed, 0 errored.", text, StringComparison.Ordinal);
+        Assert.Contains("2 check(s): 1 passed, 0 warned, 1 failed, 0 errored, 0 skipped.", text, StringComparison.Ordinal);
     }
 
     [Fact]

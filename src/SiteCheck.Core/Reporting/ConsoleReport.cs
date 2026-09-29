@@ -76,6 +76,7 @@ public static class ConsoleReport
         CheckStatus.Warn => "WARN",
         CheckStatus.Fail => "FAIL",
         CheckStatus.Error => "ERROR",
+        CheckStatus.Skip => "SKIP",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown check status."),
     };
 
@@ -84,6 +85,6 @@ public static class ConsoleReport
         int Count(CheckStatus status) => results.Count(r => r.Status == status);
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"{results.Count} check(s): {Count(CheckStatus.Pass)} passed, {Count(CheckStatus.Warn)} warned, {Count(CheckStatus.Fail)} failed, {Count(CheckStatus.Error)} errored.");
+            $"{results.Count} check(s): {Count(CheckStatus.Pass)} passed, {Count(CheckStatus.Warn)} warned, {Count(CheckStatus.Fail)} failed, {Count(CheckStatus.Error)} errored, {Count(CheckStatus.Skip)} skipped.");
     }
 }
