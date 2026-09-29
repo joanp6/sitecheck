@@ -13,8 +13,13 @@ namespace SiteCheck.Checks;
 /// cheapest signal that a site was built with phones in mind, but it is only a signal: a page can
 /// declare it correctly and still have a layout that breaks on a small screen. Nothing here
 /// renders the page, so nothing here can say otherwise.
+/// <para>
+/// It also sees the page the way a desktop client does. A site that sends phones a different page
+/// based on the User-Agent (Wikipedia moves them to a separate mobile host) is graded on the
+/// desktop page it sends us, and can fail here while working well on a phone.
+/// </para>
 /// </remarks>
-public sealed partial class MobileCheck : ISiteCheck
+public sealed class MobileCheck : ISiteCheck
 {
     private readonly HttpClient _httpClient;
 
@@ -135,39 +140,15 @@ public sealed partial class MobileCheck : ISiteCheck
     /// Returns the <c>content</c> of the first <c>&lt;meta name="viewport"&gt;</c>, or
     /// <see langword="null"/> if the page has none.
     /// </summary>
-    /// <remarks>
-    /// A pattern rather than an HTML parser, because one attribute of one tag does not justify a
-    /// dependency. The price is that a tag inside an HTML comment still counts.
-    /// </remarks>
     private static string? FindViewport(string html)
     {
         try
         {
-            foreach (Match tag in MetaTag().Matches(html))
+            foreach (var meta in HtmlTags.Find(html, "meta"))
             {
-                string? name = null;
-                string? content = null;
-
-                foreach (Match attribute in Attribute().Matches(tag.Value))
+                if (meta.TryGetValue("name", out var name) && string.Equals(name, "viewport", StringComparison.OrdinalIgnoreCase))
                 {
-                    var value = attribute.Groups["dq"].Success ? attribute.Groups["dq"].Value
-                        : attribute.Groups["sq"].Success ? attribute.Groups["sq"].Value
-                        : attribute.Groups["bare"].Value;
-
-                    switch (attribute.Groups["key"].Value.ToLowerInvariant())
-                    {
-                        case "name":
-                            name = value;
-                            break;
-                        case "content":
-                            content = value;
-                            break;
-                    }
-                }
-
-                if (string.Equals(name, "viewport", StringComparison.OrdinalIgnoreCase))
-                {
-                    return content ?? string.Empty;
+                    return meta.GetValueOrDefault("content", string.Empty);
                 }
             }
         }
@@ -179,13 +160,4 @@ public sealed partial class MobileCheck : ISiteCheck
 
         return null;
     }
-
-    [GeneratedRegex(@"<meta\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex MetaTag();
-
-    [GeneratedRegex(
-        """(?<key>[a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)'|(?<bare>[^\s"'>]+))""",
-        RegexOptions.CultureInvariant,
-        matchTimeoutMilliseconds: 1000)]
-    private static partial Regex Attribute();
 }
