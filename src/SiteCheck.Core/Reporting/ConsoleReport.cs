@@ -17,7 +17,7 @@ public static class ConsoleReport
     /// <summary>Everything passed, or only warned.</summary>
     public const int ExitOk = 0;
 
-    /// <summary>At least one check found a defect in the site.</summary>
+    /// <summary>At least one check found a defect in a site.</summary>
     public const int ExitFailed = 1;
 
     /// <summary>
@@ -27,50 +27,52 @@ public static class ConsoleReport
     public const int ExitToolError = 2;
 
     /// <summary>
-    /// A defect outranks a tooling gap: if the site is already known to be broken, that is the
-    /// news, and a script must not read it as "we could not tell".
+    /// The exit code for a run over one or more sites, from the worst verdict among them.
     /// </summary>
-    public static int ExitCodeFor(IReadOnlyList<CheckResult> results)
+    /// <remarks>See <see cref="SiteReport.Verdict"/> for why a defect outranks a tooling error.</remarks>
+    public static int ExitCodeFor(IReadOnlyList<SiteReport> reports)
     {
-        ArgumentNullException.ThrowIfNull(results);
+        ArgumentNullException.ThrowIfNull(reports);
 
-        if (results.Any(r => r.Status == CheckStatus.Fail))
+        return SiteReport.Worst(reports.Select(r => r.Verdict)) switch
         {
-            return ExitFailed;
-        }
-
-        return results.Any(r => r.Status == CheckStatus.Error) ? ExitToolError : ExitOk;
+            CheckStatus.Fail => ExitFailed,
+            CheckStatus.Error => ExitToolError,
+            _ => ExitOk,
+        };
     }
 
-    public static string Render(Uri url, IReadOnlyList<CheckResult> results)
+    public static string Render(IReadOnlyList<SiteReport> reports)
     {
-        ArgumentNullException.ThrowIfNull(url);
-        ArgumentNullException.ThrowIfNull(results);
+        ArgumentNullException.ThrowIfNull(reports);
 
-        var nameWidth = results.Count == 0 ? 0 : results.Max(r => r.CheckName.Length);
-        var report = new StringBuilder();
+        var text = new StringBuilder();
 
-        report.AppendLine(CultureInfo.InvariantCulture, $"sitecheck report for {url}");
-        report.AppendLine();
-
-        foreach (var result in results)
+        foreach (var report in reports)
         {
-            report.AppendLine(CultureInfo.InvariantCulture,
-                $"  {Label(result.Status),-5}  {result.CheckName.PadRight(nameWidth)}  {result.Detail}");
+            if (text.Length > 0)
+            {
+                text.AppendLine();
+            }
+
+            RenderSite(text, report);
         }
 
-        report.AppendLine();
-        report.AppendLine(Summary(results));
-
-        if (results.Any(r => r.Status == CheckStatus.Error))
+        if (reports.Count > 1)
         {
-            report.AppendLine("ERROR means sitecheck itself could not evaluate a check. It is not a finding about the site.");
+            text.AppendLine();
+            text.AppendLine(SitesSummary(reports));
         }
 
-        return report.ToString();
+        if (reports.Any(r => r.Results.Any(result => result.Status == CheckStatus.Error)))
+        {
+            text.AppendLine("ERROR means sitecheck itself could not evaluate a check. It is not a finding about the site.");
+        }
+
+        return text.ToString();
     }
 
-    private static string Label(CheckStatus status) => status switch
+    public static string Label(CheckStatus status) => status switch
     {
         CheckStatus.Pass => "PASS",
         CheckStatus.Warn => "WARN",
@@ -80,11 +82,37 @@ public static class ConsoleReport
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown check status."),
     };
 
-    private static string Summary(IReadOnlyList<CheckResult> results)
+    private static void RenderSite(StringBuilder text, SiteReport report)
+    {
+        var title = report.Site.Name is null ? report.Site.Url.ToString() : $"{report.Site.Name} ({report.Site.Url})";
+        var nameWidth = report.Results.Count == 0 ? 0 : report.Results.Max(r => r.CheckName.Length);
+
+        text.AppendLine(CultureInfo.InvariantCulture, $"sitecheck report for {title}");
+        text.AppendLine();
+
+        foreach (var result in report.Results)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture,
+                $"  {Label(result.Status),-5}  {result.CheckName.PadRight(nameWidth)}  {result.Detail}");
+        }
+
+        text.AppendLine();
+        text.AppendLine(ChecksSummary(report.Results));
+    }
+
+    private static string ChecksSummary(IReadOnlyList<CheckResult> results)
     {
         int Count(CheckStatus status) => results.Count(r => r.Status == status);
 
         return string.Create(CultureInfo.InvariantCulture,
             $"{results.Count} check(s): {Count(CheckStatus.Pass)} passed, {Count(CheckStatus.Warn)} warned, {Count(CheckStatus.Fail)} failed, {Count(CheckStatus.Error)} errored, {Count(CheckStatus.Skip)} skipped.");
+    }
+
+    private static string SitesSummary(IReadOnlyList<SiteReport> reports)
+    {
+        int Count(CheckStatus verdict) => reports.Count(r => r.Verdict == verdict);
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"{reports.Count} site(s): {Count(CheckStatus.Pass)} fine, {Count(CheckStatus.Warn)} with warnings, {Count(CheckStatus.Fail)} failing, {Count(CheckStatus.Error)} not fully checked.");
     }
 }
