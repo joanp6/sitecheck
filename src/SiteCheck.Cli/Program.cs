@@ -29,7 +29,7 @@ var formatOption = new Option<string>("--format")
     Description = "How to write the report.",
     DefaultValueFactory = _ => "text",
 };
-formatOption.AcceptOnlyFromAmong("text", "json");
+formatOption.AcceptOnlyFromAmong("text", "json", "html");
 
 var outputOption = new Option<FileInfo?>("--output", "-o")
 {
@@ -64,7 +64,12 @@ audit.SetAction(async (parse, cancellationToken) =>
             reports.Add(await checks.Runner.AuditAsync(site, cancellationToken));
         }
 
-        var report = parse.GetValue(formatOption) == "json" ? JsonReport.Render(reports) : ConsoleReport.Render(reports);
+        var report = parse.GetValue(formatOption) switch
+        {
+            "json" => JsonReport.Render(reports),
+            "html" => HtmlReport.Render(reports, TimeProvider.System.GetUtcNow()),
+            _ => ConsoleReport.Render(reports),
+        };
         await WriteAsync(report, parse.GetValue(outputOption), cancellationToken);
 
         return ConsoleReport.ExitCodeFor(reports);
