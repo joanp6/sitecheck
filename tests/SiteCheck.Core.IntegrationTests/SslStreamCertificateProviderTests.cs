@@ -90,11 +90,30 @@ public sealed class SslStreamCertificateProviderTests
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(2));
 
-        // The provider has no timeout of its own: it stops when the caller says so.
-        // This test is what documents that contract.
+        // The caller's deadline wins over the provider's own: a cancelled run must stay a
+        // cancelled run, not turn into a TimeoutException the check would call a finding.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => Provider.GetAsync(wedgedHost.Url, deadline.Token));
     }
+
+    [Fact]
+    public async Task GetAsync_WhenTheHostGoesSilent_GivesUpOnItsOwnAndSaysItTimedOut()
+    {
+        IntegrationGate.RequireEnabled();
+
+        using var wedgedHost = new BlackHoleListener();
+        var provider = new SslStreamCertificateProvider(TimeSpan.FromMilliseconds(500));
+
+        // No token deadline at all: without a timeout of its own this would hang forever.
+        await Assert.ThrowsAsync<TimeoutException>(
+            () => provider.GetAsync(wedgedHost.Url, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Constructor_RejectsANonPositiveTimeout(int seconds) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SslStreamCertificateProvider(TimeSpan.FromSeconds(seconds)));
 
     private static async Task<CertificateInfo> GetAsync(string host)
     {
