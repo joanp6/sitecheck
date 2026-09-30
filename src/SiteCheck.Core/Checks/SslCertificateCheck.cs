@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Authentication;
 using SiteCheck.Certificates;
 
 namespace SiteCheck.Checks;
@@ -22,6 +24,12 @@ public sealed record SslCertificateCheckOptions(int WarnWithinDays = 30)
 /// Reports whether the site is served over a TLS certificate that is trusted,
 /// currently valid, and not about to expire.
 /// </summary>
+/// <remarks>
+/// A host that cannot be reached, or whose handshake breaks off, is a <see cref="CheckStatus.Fail"/>:
+/// a visitor could not get in either. That matches <see cref="LoadTimeCheck"/>, so one dead site
+/// does not read as a site defect in one line of the report and a tooling gap in the next.
+/// Anything unexpected still propagates and becomes an <see cref="CheckStatus.Error"/>.
+/// </remarks>
 public sealed class SslCertificateCheck : ISiteCheck
 {
     private readonly ICertificateProvider _certificates;
@@ -52,7 +60,26 @@ public sealed class SslCertificateCheck : ISiteCheck
             return CheckOutcome.Fail($"The site is served over {url.Scheme}, so visitors get no certificate at all.");
         }
 
-        var info = await _certificates.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        CertificateInfo info;
+
+        try
+        {
+            info = await _certificates.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        }
+        catch (SocketException)
+        {
+            return CheckOutcome.Fail($"{url.Host} could not be reached, so visitors cannot open the site over HTTPS either.");
+        }
+        catch (TimeoutException)
+        {
+            return CheckOutcome.Fail($"{url.Host} did not answer the secure connection in time.");
+        }
+        catch (Exception ex) when (ex is AuthenticationException or IOException)
+        {
+            // The handshake itself broke off: a visitor's browser would hit the same wall.
+            return CheckOutcome.Fail($"The secure connection to {url.Host} could not be established: {ex.Message}");
+        }
+
         using var certificate = info.Certificate;
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
