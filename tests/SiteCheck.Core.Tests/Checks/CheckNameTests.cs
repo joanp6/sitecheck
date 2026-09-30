@@ -29,6 +29,7 @@ public sealed class CheckNameTests : IDisposable
         [
             new SslCertificateCheck(FakeCertificateProvider.NeverCalled(), TimeProvider.System),
             new LoadTimeCheck(_httpClient, TimeProvider.System),
+            new MobileCheck(_httpClient),
         ];
 
     public void Dispose() => _httpClient.Dispose();

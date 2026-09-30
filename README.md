@@ -15,8 +15,9 @@ sitecheck report for https://example.com/
 
   PASS   ssl-certificate  The certificate is valid until 2026-12-25 UTC, 87 day(s) from now.
   PASS   load-time        The page loaded in 0.12 s.
+  PASS   mobile-viewport  The page declares a mobile viewport that follows the device width.
 
-2 check(s): 2 passed, 0 warned, 0 failed, 0 errored.
+3 check(s): 3 passed, 0 warned, 0 failed, 0 errored.
 ```
 
 The address can be a bare host (`example.com`, read as `https://example.com/`) or a full
@@ -42,7 +43,7 @@ A defect wins over a tooling error: if both happen, the exit code is 1.
 |-------|--------|-----------------|
 | `ssl-certificate` | ✅ | Trusted, currently valid, and not within 30 days of expiry |
 | `load-time` | ✅ | Full page download: warns past 1.5 s, fails past 4 s |
-| mobile | planned | |
+| `mobile-viewport` | ✅ | Declares `width=device-width` (or `initial-scale=1`); warns if it blocks pinch zoom. Reads the tag only: it does not render the page |
 | broken links | planned | |
 | form delivery | planned | |
 

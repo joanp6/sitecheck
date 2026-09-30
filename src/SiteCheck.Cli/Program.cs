@@ -29,10 +29,15 @@ Console.CancelKeyPress += (_, e) =>
 
 using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
 
+// Many sites answer 403 to a request with no User-Agent, which would grade a healthy site as
+// broken because of us. Say who we are and where to read about it.
+httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("sitecheck/0.1 (+https://github.com/joanp6/sitecheck)");
+
 var runner = new CheckRunner(
     [
         new SslCertificateCheck(new SslStreamCertificateProvider(), TimeProvider.System),
         new LoadTimeCheck(httpClient, TimeProvider.System),
+        new MobileCheck(httpClient),
     ],
     TimeProvider.System);
 
