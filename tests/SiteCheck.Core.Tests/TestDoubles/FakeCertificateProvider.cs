@@ -70,9 +70,12 @@ internal sealed class FakeCertificateProvider : ICertificateProvider
     /// <summary>A provider that fails loudly if the check tries to connect at all.</summary>
     public static FakeCertificateProvider NeverCalled() => new(info: null);
 
+    public Uri? LastUrl { get; private set; }
+
     public Task<CertificateInfo> GetAsync(Uri url, CancellationToken cancellationToken = default)
     {
         Invocations++;
+        LastUrl = url;
 
         if (_failure is not null)
         {

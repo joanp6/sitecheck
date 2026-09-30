@@ -38,4 +38,6 @@ public sealed record CheckOutcome(CheckStatus Status, string Detail)
     public static CheckOutcome Fail(string detail) => new(CheckStatus.Fail, detail);
 
     public static CheckOutcome Error(string detail) => new(CheckStatus.Error, detail);
+
+    public static CheckOutcome Skip(string detail) => new(CheckStatus.Skip, detail);
 }

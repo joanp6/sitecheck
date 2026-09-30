@@ -55,16 +55,20 @@ public sealed class SslCertificateCheck : ISiteCheck
     {
         ArgumentNullException.ThrowIfNull(url);
 
-        if (url.Scheme != Uri.UriSchemeHttps)
-        {
-            return CheckOutcome.Fail($"The site is served over {url.Scheme}, so visitors get no certificate at all.");
-        }
+        // An http:// address is checked at its https equivalent rather than failed on sight. Any
+        // site worth the name sends http visitors on to https, and whether it does is the
+        // https-redirect check's question; this one asks whether the https site they land on has a
+        // certificate worth trusting. Failing here instead graded a correctly redirecting site as
+        // having no certificate, just because its owner typed the address without the s.
+        var secure = url.Scheme == Uri.UriSchemeHttps
+            ? url
+            : new UriBuilder(url) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;
 
         CertificateInfo info;
 
         try
         {
-            info = await _certificates.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            info = await _certificates.GetAsync(secure, cancellationToken).ConfigureAwait(false);
         }
         catch (SocketException)
         {

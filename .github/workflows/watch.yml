@@ -1,0 +1,80 @@
+name: watch
+
+# Audits every site in the SITECHECK_SITES secret once a day and reports what changed since the
+# day before. A run goes red when something got worse, and GitHub emails the repository owner
+# about red scheduled runs by default: that is the alert, with nothing else to set up. Telegram
+# is optional on top. See docs/watch.md.
+
+on:
+  schedule:
+    # 06:00 UTC: 07:00 or 08:00 in Spain, before a shop opens. GitHub may start it a few
+    # minutes late when its runners are busy.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two runs at once would both read yesterday's history and both announce the same change.
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Watch sites
+    runs-on: ubuntu-latest
+    env:
+      SITES: ${{ secrets.SITECHECK_SITES }}
+
+    steps:
+      # Every other step checks this too. A fork, or this repository before the secret is set,
+      # gets a green run with a note instead of a red one that says nothing useful.
+      - name: Check that there are sites to watch
+        if: env.SITES == ''
+        run: echo "::notice::No SITECHECK_SITES secret, so there is nothing to watch. See docs/watch.md."
+
+      - uses: actions/checkout@v4
+        if: env.SITES != ''
+
+      - name: Install the SDK pinned in global.json
+        if: env.SITES != ''
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # The history lives in the Actions cache rather than in the repository, so the list of sites
+      # and how they are doing is never committed. Each run saves under a new key and restores the
+      # newest by prefix, because a cache entry cannot be overwritten. Entries unused for 7 days
+      # are evicted, which a daily run never lets happen.
+      - name: Restore yesterday's history
+        if: env.SITES != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: .sitecheck/state.json
+          key: sitecheck-state-${{ github.run_id }}
+          restore-keys: sitecheck-state-
+
+      - name: Write the sites file
+        if: env.SITES != ''
+        run: |
+          mkdir -p .sitecheck
+          printf '%s' "$SITES" > .sitecheck/sites.json
+
+      - name: Watch
+        if: env.SITES != ''
+        env:
+          SITECHECK_TELEGRAM_TOKEN: ${{ secrets.SITECHECK_TELEGRAM_TOKEN }}
+          SITECHECK_TELEGRAM_CHAT_ID: ${{ secrets.SITECHECK_TELEGRAM_CHAT_ID }}
+        run: >
+          dotnet run --project src/SiteCheck.Cli --configuration Release --
+          watch --sites .sitecheck/sites.json --state .sitecheck/state.json
+
+      # Always, including when Watch went red: watch writes the history before it exits, and a run
+      # that found a problem is exactly the one whose history the next run must compare against.
+      - name: Save today's history
+        if: always() && env.SITES != '' && hashFiles('.sitecheck/state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .sitecheck/state.json
+          key: sitecheck-state-${{ github.run_id }}

@@ -31,6 +31,10 @@ public sealed class CheckNameTests : IDisposable
             new LoadTimeCheck(_httpClient, TimeProvider.System),
             new MobileCheck(_httpClient),
             new BrokenLinksCheck(_httpClient),
+            new HttpsRedirectCheck(_httpClient),
+            new DomainExpiryCheck(_httpClient, TimeProvider.System),
+            new ContactFormCheck(_httpClient),
+            new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 
     public void Dispose() => _httpClient.Dispose();

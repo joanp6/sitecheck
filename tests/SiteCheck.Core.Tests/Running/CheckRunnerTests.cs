@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using SiteCheck.Checks;
 using SiteCheck.Core.Tests.TestDoubles;
 using SiteCheck.Running;
+using SiteCheck.Sites;
 
 namespace SiteCheck.Core.Tests.Running;
 
@@ -144,5 +145,37 @@ public sealed class CheckRunnerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(Site, cancellation.Token));
 
         Assert.Equal(0, skipped.Invocations);
+    }
+
+    [Fact]
+    public async Task AuditAsync_RecordsTheSiteAndWhenTheAuditStarted()
+    {
+        var startedAt = new DateTimeOffset(2026, 1, 15, 8, 0, 0, TimeSpan.Zero);
+        var clock = new FakeTimeProvider(startedAt);
+        var site = new Site(Site, "Example");
+        var runner = new CheckRunner([StubCheck.Taking("slow", clock, TimeSpan.FromSeconds(3))], clock);
+
+        var report = await runner.AuditAsync(site, TestContext.Current.CancellationToken);
+
+        // The start, not the end: a report dated after its own checks would read as if they ran later.
+        Assert.Equal(startedAt, report.CheckedAt);
+        Assert.Equal(site, report.Site);
+        Assert.Equal(["slow"], report.Results.Select(r => r.CheckName));
+    }
+
+    [Theory]
+    [InlineData(new[] { CheckStatus.Pass, CheckStatus.Skip }, CheckStatus.Pass)]
+    [InlineData(new[] { CheckStatus.Skip }, CheckStatus.Pass)]
+    [InlineData(new[] { CheckStatus.Pass, CheckStatus.Warn }, CheckStatus.Warn)]
+    [InlineData(new[] { CheckStatus.Warn, CheckStatus.Error }, CheckStatus.Error)]
+    [InlineData(new[] { CheckStatus.Error, CheckStatus.Fail, CheckStatus.Warn }, CheckStatus.Fail)]
+    public void SiteReport_VerdictIsTheWorstFinding(CheckStatus[] statuses, CheckStatus expected)
+    {
+        var report = new SiteReport(
+            new Site(Site),
+            DateTimeOffset.UnixEpoch,
+            [.. statuses.Select(s => new CheckResult("c", s, "d", TimeSpan.Zero))]);
+
+        Assert.Equal(expected, report.Verdict);
     }
 }

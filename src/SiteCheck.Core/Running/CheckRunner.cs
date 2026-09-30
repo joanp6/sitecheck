@@ -1,4 +1,5 @@
 using SiteCheck.Checks;
+using SiteCheck.Sites;
 
 namespace SiteCheck.Running;
 
@@ -44,6 +45,19 @@ public sealed class CheckRunner
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Runs every registered check against <paramref name="site"/> and records when.
+    /// </summary>
+    public async Task<SiteReport> AuditAsync(Site site, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(site);
+
+        var startedAt = _timeProvider.GetUtcNow();
+        var results = await RunAsync(site.Url, cancellationToken).ConfigureAwait(false);
+
+        return new SiteReport(site, startedAt, results);
     }
 
     private async Task<CheckResult> RunOneAsync(ISiteCheck check, Uri url, CancellationToken cancellationToken)
