@@ -38,6 +38,7 @@ var runner = new CheckRunner(
         new SslCertificateCheck(new SslStreamCertificateProvider(), TimeProvider.System),
         new LoadTimeCheck(httpClient, TimeProvider.System),
         new MobileCheck(httpClient),
+        new BrokenLinksCheck(httpClient),
     ],
     TimeProvider.System);
 
