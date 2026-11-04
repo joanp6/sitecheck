@@ -27,6 +27,18 @@ public sealed class CheckRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_CarriesTheMeasuredTimeAndStatusThroughToTheResult()
+    {
+        var outcome = CheckOutcome.Fail("Forbidden.") with { Elapsed = TimeSpan.FromMilliseconds(90), StatusCode = 403 };
+        var runner = new CheckRunner([StubCheck.Returning("load-time", outcome)], new FakeTimeProvider());
+
+        var result = Assert.Single(await runner.RunAsync(Site, TestContext.Current.CancellationToken));
+
+        Assert.Equal(TimeSpan.FromMilliseconds(90), result.Elapsed);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
     public async Task RunAsync_CarriesTheOutcomeValuesThroughToTheResult()
     {
         // The runner adds the name and the timing; it must not quietly drop anything the

@@ -17,9 +17,18 @@ namespace SiteCheck.Running;
 /// When the thing the check watches expires, or <see langword="null"/> if it does not expire.
 /// This is the machine-readable half of what <paramref name="Detail"/> says in words.
 /// </param>
+/// <param name="Elapsed">
+/// How long the site took to answer, when the check measured it; see <see cref="CheckOutcome.Elapsed"/>.
+/// Unlike <paramref name="Duration"/>, this is a finding about the site, not about our tooling.
+/// </param>
+/// <param name="StatusCode">
+/// The HTTP status the site answered with, when the check made a request and got a response.
+/// </param>
 public sealed record CheckResult(
     string CheckName,
     CheckStatus Status,
     string Detail,
     TimeSpan Duration,
-    DateTimeOffset? ValidUntil = null);
+    DateTimeOffset? ValidUntil = null,
+    TimeSpan? Elapsed = null,
+    int? StatusCode = null);

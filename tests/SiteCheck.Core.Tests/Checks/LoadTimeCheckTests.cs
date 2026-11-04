@@ -42,6 +42,39 @@ public sealed class LoadTimeCheckTests
     }
 
     [Fact]
+    public async Task RunAsync_ReportsTheMeasuredTimeAndStatusAsValues()
+    {
+        var clock = new FakeTimeProvider();
+        using var client = new HttpClient(
+            StubHttpMessageHandler.Responding(HttpStatusCode.OK, clock, TimeSpan.FromSeconds(0.75)));
+        var check = new LoadTimeCheck(client, clock);
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(TimeSpan.FromSeconds(0.75), outcome.Elapsed);
+        Assert.Equal(200, outcome.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task RunAsync_WhenTheSiteAnswersWithAnErrorStatus_ReportsTheStatusAsAValue(HttpStatusCode status)
+    {
+        // A site that turns robots away answers fast with 403 or 429. Readers must be able to
+        // tell that apart from a fast page without parsing the sentence.
+        var clock = new FakeTimeProvider();
+        using var client = new HttpClient(
+            StubHttpMessageHandler.Responding(status, clock, TimeSpan.FromMilliseconds(90)));
+        var check = new LoadTimeCheck(client, clock);
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal((int)status, outcome.StatusCode);
+        Assert.Equal(TimeSpan.FromMilliseconds(90), outcome.Elapsed);
+    }
+
+    [Fact]
     public async Task RunAsync_HonoursCustomThresholds()
     {
         var clock = new FakeTimeProvider();
@@ -84,6 +117,38 @@ public sealed class LoadTimeCheckTests
 
         Assert.Equal(CheckStatus.Fail, outcome.Status);
         Assert.Contains("could not be reached", outcome.Detail, StringComparison.Ordinal);
+        Assert.Null(outcome.StatusCode);
+        Assert.Null(outcome.Elapsed);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenTheBodyBreaksOffAfterTheHeaders_KeepsTheStatusThatArrived()
+    {
+        // The headers said 403 before the connection dropped. That answer arrived and must not be
+        // lost, or a site turning robots away would look like one that cannot be reached at all.
+        using var client = new HttpClient(StubHttpMessageHandler.Routing(_ =>
+            new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = new BrokenContent() }));
+        var check = new LoadTimeCheck(client, new FakeTimeProvider());
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Fail, outcome.Status);
+        Assert.Equal(403, outcome.StatusCode);
+        Assert.Null(outcome.Elapsed);
+        Assert.Contains("answered 403", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>A body whose connection drops part-way, as a real server's sometimes does.</summary>
+    private sealed class BrokenContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) =>
+            throw new HttpRequestException("The response ended prematurely.");
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
     }
 
     [Fact]
@@ -101,6 +166,8 @@ public sealed class LoadTimeCheckTests
 
         Assert.Equal(CheckStatus.Fail, outcome.Status);
         Assert.Contains("did not respond within 10 s", outcome.Detail, StringComparison.Ordinal);
+        Assert.Null(outcome.StatusCode);
+        Assert.Null(outcome.Elapsed);
     }
 
     [Fact]
