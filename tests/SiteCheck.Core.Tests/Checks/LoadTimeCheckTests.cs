@@ -42,6 +42,39 @@ public sealed class LoadTimeCheckTests
     }
 
     [Fact]
+    public async Task RunAsync_ReportsTheMeasuredTimeAndStatusAsValues()
+    {
+        var clock = new FakeTimeProvider();
+        using var client = new HttpClient(
+            StubHttpMessageHandler.Responding(HttpStatusCode.OK, clock, TimeSpan.FromSeconds(0.75)));
+        var check = new LoadTimeCheck(client, clock);
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(TimeSpan.FromSeconds(0.75), outcome.Elapsed);
+        Assert.Equal(200, outcome.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task RunAsync_WhenTheSiteAnswersWithAnErrorStatus_ReportsTheStatusAsAValue(HttpStatusCode status)
+    {
+        // A site that turns robots away answers fast with 403 or 429. Readers must be able to
+        // tell that apart from a fast page without parsing the sentence.
+        var clock = new FakeTimeProvider();
+        using var client = new HttpClient(
+            StubHttpMessageHandler.Responding(status, clock, TimeSpan.FromMilliseconds(90)));
+        var check = new LoadTimeCheck(client, clock);
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal((int)status, outcome.StatusCode);
+        Assert.Equal(TimeSpan.FromMilliseconds(90), outcome.Elapsed);
+    }
+
+    [Fact]
     public async Task RunAsync_HonoursCustomThresholds()
     {
         var clock = new FakeTimeProvider();
@@ -84,6 +117,8 @@ public sealed class LoadTimeCheckTests
 
         Assert.Equal(CheckStatus.Fail, outcome.Status);
         Assert.Contains("could not be reached", outcome.Detail, StringComparison.Ordinal);
+        Assert.Null(outcome.StatusCode);
+        Assert.Null(outcome.Elapsed);
     }
 
     [Fact]
@@ -101,6 +136,8 @@ public sealed class LoadTimeCheckTests
 
         Assert.Equal(CheckStatus.Fail, outcome.Status);
         Assert.Contains("did not respond within 10 s", outcome.Detail, StringComparison.Ordinal);
+        Assert.Null(outcome.StatusCode);
+        Assert.Null(outcome.Elapsed);
     }
 
     [Fact]

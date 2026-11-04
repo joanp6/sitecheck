@@ -56,6 +56,19 @@ dotnet run --project src/SiteCheck.Cli -- audit --sites sites.json
 
 `-o report.html` writes to a file instead of the console.
 
+In `json`, `detail` is a sentence for people and may be reworded at any time. Read the facts from
+their own fields instead:
+
+| Field | On | Meaning |
+|---|---|---|
+| `status` | every result | `pass`, `warn`, `fail`, `error` or `skip` |
+| `durationMs` | every result | How long the check ran |
+| `validUntil` | `ssl-certificate`, `domain-expiry` | When the certificate or domain expires. Omitted when unknown |
+| `elapsedMs` | `load-time` | How long the page took to arrive in full, in whole milliseconds. Omitted when no answer came |
+| `statusCode` | `load-time` | The HTTP status the site answered with, errors included (a 403 or 429 usually means the site turns robots away, not that it is slow). Omitted when no response arrived |
+
+New fields are only ever added within format `1`, so reports written by older versions still read.
+
 ### Verdicts
 
 | | Meaning |

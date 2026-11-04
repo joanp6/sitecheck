@@ -31,6 +31,14 @@ namespace SiteCheck.Reporting;
 ///           "detail": "The certificate is valid until ...",
 ///           "durationMs": 212,
 ///           "validUntil": "2026-11-01T12:00:00+00:00"   // omitted when it does not apply
+///         },
+///         {
+///           "check": "load-time",
+///           "status": "fail",
+///           "detail": "The site answered 403 (Forbidden) after 0.09 s.",
+///           "durationMs": 95,
+///           "elapsedMs": 90,                      // omitted when nothing was measured
+///           "statusCode": 403                     // omitted when no HTTP response arrived
 ///         }
 ///       ]
 ///     }
@@ -39,6 +47,13 @@ namespace SiteCheck.Reporting;
 /// </code>
 /// <c>detail</c> is prose for people and may be reworded at any time; see
 /// <see cref="CheckOutcome.Detail"/>. Every fact a machine needs is its own field.
+/// <para>
+/// <c>durationMs</c> is how long the check ran; <c>elapsedMs</c> is what the check measured about
+/// the site (for <c>load-time</c>, how long the page took to arrive in full). <c>statusCode</c> is
+/// the HTTP status the site answered with, error statuses included, so a reader can tell a site
+/// that turns robots away (403, 429) from one that is slow. Fields are only ever added within a
+/// format, so older files without them stay readable.
+/// </para>
 /// </remarks>
 public static class JsonReport
 {
@@ -131,6 +146,16 @@ public static class JsonReport
                 json.WriteString("validUntil", validUntil);
             }
 
+            if (result.Elapsed is { } elapsed)
+            {
+                json.WriteNumber("elapsedMs", (long)elapsed.TotalMilliseconds);
+            }
+
+            if (result.StatusCode is { } statusCode)
+            {
+                json.WriteNumber("statusCode", statusCode);
+            }
+
             json.WriteEndObject();
         }
 
@@ -154,7 +179,9 @@ public static class JsonReport
         ParseStatus(result.GetProperty("status").GetString()),
         result.GetProperty("detail").GetString()!,
         TimeSpan.FromMilliseconds(result.GetProperty("durationMs").GetInt64()),
-        result.TryGetProperty("validUntil", out var validUntil) ? validUntil.GetDateTimeOffset() : null);
+        result.TryGetProperty("validUntil", out var validUntil) ? validUntil.GetDateTimeOffset() : null,
+        result.TryGetProperty("elapsedMs", out var elapsed) ? TimeSpan.FromMilliseconds(elapsed.GetInt64()) : null,
+        result.TryGetProperty("statusCode", out var statusCode) ? statusCode.GetInt32() : null);
 
     private static CheckStatus ParseStatus(string? name) =>
         Enum.TryParse<CheckStatus>(name, ignoreCase: true, out var status) && Enum.IsDefined(status) && !int.TryParse(name, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)

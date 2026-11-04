@@ -64,20 +64,9 @@ public sealed class LoadTimeCheck : ISiteCheck
 
             var elapsed = _timeProvider.GetElapsedTime(startedAt);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                return CheckOutcome.Fail(
-                    $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}) after {Seconds(elapsed)}.");
-            }
-
-            if (elapsed >= _options.Fail)
-            {
-                return CheckOutcome.Fail($"The page took {Seconds(elapsed)} to load, over the {Seconds(_options.Fail)} budget.");
-            }
-
-            return elapsed >= _options.Warn
-                ? CheckOutcome.Warn($"The page took {Seconds(elapsed)} to load, over the {Seconds(_options.Warn)} target.")
-                : CheckOutcome.Pass($"The page loaded in {Seconds(elapsed)}.");
+            // The measured facts travel as values beside the prose, so nothing downstream has
+            // to read them back out of the sentence.
+            return Grade(response, elapsed) with { Elapsed = elapsed, StatusCode = (int)response.StatusCode };
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -89,6 +78,24 @@ public sealed class LoadTimeCheck : ISiteCheck
         {
             return CheckOutcome.Fail($"The site could not be reached: {ex.Message}");
         }
+    }
+
+    private CheckOutcome Grade(HttpResponseMessage response, TimeSpan elapsed)
+    {
+        if (!response.IsSuccessStatusCode)
+        {
+            return CheckOutcome.Fail(
+                $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}) after {Seconds(elapsed)}.");
+        }
+
+        if (elapsed >= _options.Fail)
+        {
+            return CheckOutcome.Fail($"The page took {Seconds(elapsed)} to load, over the {Seconds(_options.Fail)} budget.");
+        }
+
+        return elapsed >= _options.Warn
+            ? CheckOutcome.Warn($"The page took {Seconds(elapsed)} to load, over the {Seconds(_options.Warn)} target.")
+            : CheckOutcome.Pass($"The page loaded in {Seconds(elapsed)}.");
     }
 
     private static string Seconds(TimeSpan duration) =>
