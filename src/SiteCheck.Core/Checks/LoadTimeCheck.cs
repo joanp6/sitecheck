@@ -52,11 +52,17 @@ public sealed class LoadTimeCheck : ISiteCheck
 
         var startedAt = _timeProvider.GetTimestamp();
 
+        // Kept outside the try: once the headers are in, the site has answered, and that answer
+        // is still worth reporting if the body then fails to arrive.
+        int? statusCode = null;
+
         try
         {
             using var response = await _httpClient
                 .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
+
+            statusCode = (int)response.StatusCode;
 
             // Drain the body before stopping the clock: headers can arrive quickly in
             // front of a page that then takes seconds to finish streaming.
@@ -66,17 +72,19 @@ public sealed class LoadTimeCheck : ISiteCheck
 
             // The measured facts travel as values beside the prose, so nothing downstream has
             // to read them back out of the sentence.
-            return Grade(response, elapsed) with { Elapsed = elapsed, StatusCode = (int)response.StatusCode };
+            return Grade(response, elapsed) with { Elapsed = elapsed, StatusCode = statusCode };
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // HttpClient reports its own timeout as a cancellation. To a visitor this is
             // indistinguishable from the site being down, so it is the site's failure.
-            return CheckOutcome.Fail($"The site did not respond within {Seconds(_httpClient.Timeout)}.");
+            return CheckOutcome.Fail($"The site did not respond within {Seconds(_httpClient.Timeout)}.") with { StatusCode = statusCode };
         }
         catch (HttpRequestException ex)
         {
-            return CheckOutcome.Fail($"The site could not be reached: {ex.Message}");
+            return (statusCode is { } answered
+                ? CheckOutcome.Fail($"The site answered {answered} but the page stopped arriving: {ex.Message}")
+                : CheckOutcome.Fail($"The site could not be reached: {ex.Message}")) with { StatusCode = statusCode };
         }
     }
 

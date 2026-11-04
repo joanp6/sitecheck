@@ -122,6 +122,36 @@ public sealed class LoadTimeCheckTests
     }
 
     [Fact]
+    public async Task RunAsync_WhenTheBodyBreaksOffAfterTheHeaders_KeepsTheStatusThatArrived()
+    {
+        // The headers said 403 before the connection dropped. That answer arrived and must not be
+        // lost, or a site turning robots away would look like one that cannot be reached at all.
+        using var client = new HttpClient(StubHttpMessageHandler.Routing(_ =>
+            new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = new BrokenContent() }));
+        var check = new LoadTimeCheck(client, new FakeTimeProvider());
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Fail, outcome.Status);
+        Assert.Equal(403, outcome.StatusCode);
+        Assert.Null(outcome.Elapsed);
+        Assert.Contains("answered 403", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>A body whose connection drops part-way, as a real server's sometimes does.</summary>
+    private sealed class BrokenContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) =>
+            throw new HttpRequestException("The response ended prematurely.");
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_WhenTheRequestTimesOut_FailsRatherThanErroring()
     {
         // A site that never answers is broken for its visitors, so it is the site's
