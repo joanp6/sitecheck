@@ -35,6 +35,7 @@ public sealed class CheckNameTests : IDisposable
             new DomainExpiryCheck(_httpClient, TimeProvider.System),
             new ContactFormCheck(_httpClient),
             new MixedContentCheck(_httpClient),
+            new ClickToCallCheck(_httpClient),
             new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 

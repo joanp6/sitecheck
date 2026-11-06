@@ -32,6 +32,7 @@ public static class HtmlReport
         ["broken-links"] = "Links",
         ["contact-form"] = "Contact form",
         ["mixed-content"] = "Secure page contents",
+        ["click-to-call"] = "Call or WhatsApp with one tap",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 
