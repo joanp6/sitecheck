@@ -71,6 +71,28 @@ public sealed class CopyrightYearCheckTests
     }
 
     [Fact]
+    public async Task RunAsync_WhenAnotherYearEndsTheTextBeforeTheNotice_ReadsTheNoticesOwnYear()
+    {
+        // Tags removed, this reads "Established 2010 © 2026 Salon Test": the notice says 2026.
+        var outcome = await Run(StubHttpMessageHandler.Serving(
+            "<html><body><p>Established 2010</p><footer>© 2026 Salon Test</footer></body></html>"));
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.Contains("says 2026", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_DoesNotLetAYearBeforeTheMarkHideAnOldNotice()
+    {
+        // "Updated 2026 © 2017 Salon Test": the notice is 2017, whatever came before it.
+        var outcome = await Run(StubHttpMessageHandler.Serving(
+            "<html><body><p>Updated 2026</p><footer>© 2017 Salon Test</footer></body></html>"));
+
+        Assert.Equal(CheckStatus.Warn, outcome.Status);
+        Assert.Contains("says 2017", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_DoesNotReadAPhoneNumberNextToTheMarkAsTheYear()
     {
         // No other digits may sit between the mark and the year, so 600 111 222 is never read as 1112.

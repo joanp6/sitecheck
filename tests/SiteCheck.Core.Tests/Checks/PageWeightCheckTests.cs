@@ -313,6 +313,47 @@ public sealed class PageWeightCheckTests
         Assert.Contains("a.jpg (900 kB)", outcome.Detail, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("""<picture><source srcset="" type="image/webp"><img src="/heavy.jpg"></picture>""")]
+    [InlineData("""<picture><source srcset=" , " type="image/webp"><img src="/heavy.jpg"></picture>""")]
+    public async Task RunAsync_InAPictureWhoseSourceIsEmpty_WeighsTheFallbackTheBrowserLoads(string picture)
+    {
+        var site = new FakeSite(Page(picture), new() { ["https://salon.test/heavy.jpg"] = 900_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Warn, outcome.Status);
+        Assert.Contains("heavy.jpg (900 kB)", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_InAPicture_SkipsAnEmptySourceForALaterUsableOne()
+    {
+        var site = new FakeSite(
+            Page("""<picture><source srcset="" type="image/avif"><source srcset="/a.webp" type="image/webp"><img src="/a.jpg"></picture>"""),
+            new() { ["https://salon.test/a.webp"] = 100_000, ["https://salon.test/a.jpg"] = 900_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.Contains(site.Requests, r => r.Contains("a.webp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_KeepsImagesInPageOrderSoTheLimitDoesNotDropAnEarlyOne()
+    {
+        // A heavy hero first, then more pictures than the limit allows: the hero must be weighed.
+        var pictures = string.Concat(Enumerable.Range(1, PageWeightCheck.MaxParts)
+            .Select(i => $"""<picture><source srcset="/p{i}.webp" type="image/webp"><img src="/p{i}.jpg"></picture>"""));
+        var sizes = Enumerable.Range(1, PageWeightCheck.MaxParts).ToDictionary(i => $"https://salon.test/p{i}.webp", _ => 1_000L);
+        sizes["https://salon.test/hero.jpg"] = 2_500_000;
+
+        var outcome = await Run(new FakeSite(Page($"""<img src="/hero.jpg">{pictures}"""), sizes));
+
+        Assert.Equal(CheckStatus.Fail, outcome.Status);
+        Assert.Contains("hero.jpg (2.5 MB)", outcome.Detail, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task RunAsync_ImagesOutsideAPictureAreStillWeighed()
     {

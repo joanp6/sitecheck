@@ -289,24 +289,16 @@ public sealed partial class PageWeightCheck : ISiteCheck
         // A <picture> lets the browser choose: it loads the first <source> it can show, and the
         // <img> inside only when none fits. Weighing that <img> would grade the JPEG fallback a
         // site ships for old browsers while every visitor downloads the WebP beside it.
-        var pictures = new List<string>();
-        var outsidePictures = Picture().Replace(html, match =>
+        // Pictures and plain images are read in one pass, in document order, so the limit of
+        // parts keeps the first ones on the page whichever kind they are: a hero image above sixty
+        // pictures is still weighed.
+        foreach (Match match in PictureOrImage().Matches(html))
         {
-            pictures.Add(match.Value);
-            return " ";
-        });
+            var source = match.Value.StartsWith("<picture", StringComparison.OrdinalIgnoreCase)
+                ? PictureSource(match.Value)
+                : HtmlTags.Find(match.Value, "img").Select(ImageSource).FirstOrDefault();
 
-        foreach (var picture in pictures)
-        {
-            if (Resolve(page, PictureSource(picture)) is { } address)
-            {
-                yield return new Part(address, Kind.Image);
-            }
-        }
-
-        foreach (var image in HtmlTags.Find(outsidePictures, "img"))
-        {
-            if (Resolve(page, ImageSource(image)) is { } address)
+            if (Resolve(page, source) is { } address)
             {
                 yield return new Part(address, Kind.Image);
             }
@@ -333,15 +325,16 @@ public sealed partial class PageWeightCheck : ISiteCheck
     /// </remarks>
     private static string? PictureSource(string picture)
     {
+        // A source with an empty srcset offers nothing; the browser moves on, and so does this.
         var sources = HtmlTags.Find(picture, "source")
-            .Where(source => source.ContainsKey("srcset") && BrowsersShow(source.GetValueOrDefault("type")))
+            .Where(source => BrowsersShow(source.GetValueOrDefault("type")))
+            .Select(source => (Address: FirstCandidate(source.GetValueOrDefault("srcset", string.Empty)), Conditional: source.ContainsKey("media")))
+            .Where(source => source.Address is not null)
             .ToArray();
 
-        var chosen = sources.FirstOrDefault(source => !source.ContainsKey("media")) ?? sources.FirstOrDefault();
+        var chosen = sources.FirstOrDefault(source => !source.Conditional).Address ?? sources.FirstOrDefault().Address;
 
-        return chosen is not null
-            ? FirstCandidate(chosen["srcset"])
-            : HtmlTags.Find(picture, "img").Select(ImageSource).FirstOrDefault();
+        return chosen ?? HtmlTags.Find(picture, "img").Select(ImageSource).FirstOrDefault();
     }
 
     // Every current browser shows these. A source in another format, such as JPEG XL, is skipped
@@ -365,11 +358,13 @@ public sealed partial class PageWeightCheck : ISiteCheck
             .Select(candidate => candidate.Split(' ', 2)[0])
             .FirstOrDefault();
 
+    // A whole <picture>, or an <img> outside one. The alternation tries <picture> first at each
+    // position, so an <img> inside a picture is consumed with it and never read on its own.
     [GeneratedRegex(
-        @"<picture\b.*?</picture\s*>",
+        """<picture\b.*?</picture\s*>|<img(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*')*>""",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 1000)]
-    private static partial Regex Picture();
+    private static partial Regex PictureOrImage();
 
     private static Uri? Resolve(Uri page, string? value)
     {
