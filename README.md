@@ -18,6 +18,7 @@ sitecheck report for https://perruqueria-angela.pages.dev/
   PASS   ssl-certificate  The certificate is valid until 2026-11-01 UTC, 32 day(s) from now.
   PASS   https-redirect   Visitors who open http://perruqueria-angela.pages.dev are sent on to the secure site.
   SKIP   domain-expiry    The site lives at an address on pages.dev, which belongs to the hosting platform, so there is no domain of its own to renew.
+  SKIP   email-auth       The site lives at an address on pages.dev, which belongs to the hosting platform, so its mail settings are not the business's.
   PASS   load-time        The page loaded in 0.1 s.
   PASS   mobile-viewport  The page declares a mobile viewport that follows the device width.
   PASS   broken-links     All 11 link(s) on the page work.
@@ -32,7 +33,7 @@ sitecheck report for https://perruqueria-angela.pages.dev/
   PASS   booking-link     Visitors can book online through Booksy and find the shop on a map.
   PASS   copyright-year   The page's copyright notice says 2026, which looks current.
 
-16 check(s): 14 passed, 0 warned, 0 failed, 0 errored, 2 skipped.
+17 check(s): 14 passed, 0 warned, 0 failed, 0 errored, 3 skipped.
 ```
 
 An address can be a bare host (`example.com`, read as `https://example.com/`) or a full `http://` /
@@ -120,6 +121,7 @@ A defect wins over a tooling error: if both happen, the exit code is 1.
 | `ssl-certificate` | The https certificate is trusted, currently valid, and not within 30 days of expiry. Given an `http://` address, it checks the https site |
 | `https-redirect` | A visitor on `http://` is sent on to `https://`. Staying on http fails; nothing answering on http only warns, since browsers try https first |
 | `domain-expiry` | When the domain stops being registered, from the registry over RDAP; warns 30 days ahead. Skipped for registries without RDAP (`.es`, `.eu`, `.io`) and for addresses on a hosting platform (`pages.dev`, `github.io`, …) |
+| `email-auth` | Whether mail forged in the name of the site's domain is stopped, from its public DNS records (SPF, DMARC, MX), asked of this machine's own DNS servers; the site is not touched. No DMARC, two of them, two SPF records or `+all` fail; `p=none`, `pct` under 100 or no SPF warn. A domain with no mail, or a hosting platform's address, skips; DNS that cannot be asked is an ERROR. DKIM cannot be checked from outside |
 | `load-time` | How long the HTML takes to arrive for a first-time visitor: warns past 1.5 s, fails past 4 s |
 | `mobile-viewport` | The page declares `width=device-width` (or `initial-scale=1`); warns if it blocks pinch zoom. Reads the tag only: it does not render the page, and it sees the desktop version of sites that serve phones a different page |
 | `broken-links` | Links on the page that lead nowhere: 404, 410, 5xx or no answer. Own pages fail, other sites warn. Follows the first 50 links, not the whole site; sites that refuse robots (403, 429) are reported as unverified, not broken |

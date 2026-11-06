@@ -27,6 +27,7 @@ public static class HtmlReport
         ["ssl-certificate"] = "Security certificate",
         ["https-redirect"] = "Secure address",
         ["domain-expiry"] = "Domain registration",
+        ["email-auth"] = "Protection against forged email",
         ["load-time"] = "Speed",
         ["mobile-viewport"] = "Phones",
         ["broken-links"] = "Links",
