@@ -42,6 +42,7 @@ internal sealed class SiteChecks : IDisposable
             new MobileCheck(_httpClient),
             new BrokenLinksCheck(_httpClient),
             new ContactFormCheck(_httpClient),
+            new MixedContentCheck(_httpClient),
         ];
 
         if (includePageSpeed)
