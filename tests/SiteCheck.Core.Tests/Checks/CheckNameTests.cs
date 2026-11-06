@@ -40,6 +40,7 @@ public sealed class CheckNameTests : IDisposable
             new LocalBusinessCheck(_httpClient),
             new LegalPagesCheck(_httpClient),
             new PageWeightCheck(_httpClient),
+            new SharePreviewCheck(_httpClient),
             new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 
