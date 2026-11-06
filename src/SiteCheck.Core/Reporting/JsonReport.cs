@@ -34,8 +34,8 @@ namespace SiteCheck.Reporting;
 ///         },
 ///         {
 ///           "check": "load-time",
-///           "status": "fail",
-///           "detail": "The site answered 403 (Forbidden) after 0.09 s.",
+///           "status": "skip",                     // 403 and 429 mean the site turns robots away
+///           "detail": "The site answered 403 (Forbidden), which usually means ...",
 ///           "durationMs": 95,
 ///           "elapsedMs": 90,                      // omitted when nothing was measured
 ///           "statusCode": 403                     // omitted when no HTTP response arrived
@@ -51,7 +51,8 @@ namespace SiteCheck.Reporting;
 /// <c>durationMs</c> is how long the check ran; <c>elapsedMs</c> is what the check measured about
 /// the site (for <c>load-time</c>, how long the page took to arrive in full). <c>statusCode</c> is
 /// the HTTP status the site answered with, error statuses included, so a reader can tell a site
-/// that turns robots away (403, 429) from one that is slow. Fields are only ever added within a
+/// that turns robots away (403, 429, graded <c>skip</c> by every check that reads the page) from
+/// one that is slow or broken. Fields are only ever added within a
 /// format, so older files without them stay readable.
 /// </para>
 /// </remarks>

@@ -309,6 +309,21 @@ public sealed class BrokenLinksCheckTests
         Assert.Contains("HEAD https://example.test/new/menu", handler.Requests);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task RunAsync_WhenThePageTurnsRobotsAway_SkipsWithoutFollowingLinks(HttpStatusCode status)
+    {
+        var handler = StubHttpMessageHandler.Serving(PageLinking("/x"), status);
+        using var client = new HttpClient(handler);
+
+        var outcome = await new BrokenLinksCheck(client).RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Skip, outcome.Status);
+        Assert.Equal((int)status, outcome.StatusCode);
+        Assert.Single(handler.Requests);
+    }
+
     [Fact]
     public async Task RunAsync_WhenThePageAnswersWithAnError_FailsWithoutFollowingLinks()
     {
