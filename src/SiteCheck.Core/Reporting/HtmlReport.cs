@@ -31,6 +31,7 @@ public static class HtmlReport
         ["mobile-viewport"] = "Phones",
         ["broken-links"] = "Links",
         ["contact-form"] = "Contact form",
+        ["mixed-content"] = "Secure page contents",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 
