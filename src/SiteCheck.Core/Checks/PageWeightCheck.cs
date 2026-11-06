@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace SiteCheck.Checks;
 
@@ -46,7 +47,8 @@ public sealed record PageWeightCheckOptions(long ImageWarn, long ImageFail, long
 /// usual reason a page is slow on a phone, and the cheapest one to fix: resized and saved as WebP
 /// or a good JPEG, the same photo is a tenth of the size and looks the same.
 /// <para>
-/// It weighs the HTML and what it names: images, scripts and stylesheets, up to
+/// It weighs the HTML and what it names: images (for a <c>&lt;picture&gt;</c>, the source a browser
+/// picks rather than the fallback <c>&lt;img&gt;</c>), scripts and stylesheets, up to
 /// <see cref="MaxParts"/> of them, each asked with a HEAD request for its size (a GET when the
 /// server will not say). Compressed sizes are asked for, as a browser would. It does not run the
 /// page, so fonts, images named inside stylesheets and anything a script loads are not counted:
@@ -59,7 +61,7 @@ public sealed record PageWeightCheckOptions(long ImageWarn, long ImageFail, long
 /// <see cref="CheckOutcome.Bytes"/>.
 /// </para>
 /// </remarks>
-public sealed class PageWeightCheck : ISiteCheck
+public sealed partial class PageWeightCheck : ISiteCheck
 {
     public const int MaxParts = 60;
 
@@ -113,7 +115,7 @@ public sealed class PageWeightCheck : ISiteCheck
         {
             parts = [.. PartsOf(page.Html, page.Address).DistinctBy(part => part.Address.AbsoluteUri).Take(MaxParts)];
         }
-        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        catch (RegexMatchTimeoutException)
         {
             return CheckOutcome.Error("The page's HTML is too tangled to read in reasonable time.");
         }
@@ -284,19 +286,27 @@ public sealed class PageWeightCheck : ISiteCheck
             }
         }
 
-        foreach (var image in HtmlTags.Find(html, "img"))
+        // A <picture> lets the browser choose: it loads the first <source> it can show, and the
+        // <img> inside only when none fits. Weighing that <img> would grade the JPEG fallback a
+        // site ships for old browsers while every visitor downloads the WebP beside it.
+        var pictures = new List<string>();
+        var outsidePictures = Picture().Replace(html, match =>
         {
-            // The address the browser loads: src, or failing that the first candidate of srcset.
-            var source = image.GetValueOrDefault("src");
+            pictures.Add(match.Value);
+            return " ";
+        });
 
-            if (string.IsNullOrWhiteSpace(source) && image.TryGetValue("srcset", out var srcset))
+        foreach (var picture in pictures)
+        {
+            if (Resolve(page, PictureSource(picture)) is { } address)
             {
-                source = srcset.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Select(candidate => candidate.Split(' ', 2)[0])
-                    .FirstOrDefault();
+                yield return new Part(address, Kind.Image);
             }
+        }
 
-            if (Resolve(page, source) is { } address)
+        foreach (var image in HtmlTags.Find(outsidePictures, "img"))
+        {
+            if (Resolve(page, ImageSource(image)) is { } address)
             {
                 yield return new Part(address, Kind.Image);
             }
@@ -310,6 +320,56 @@ public sealed class PageWeightCheck : ISiteCheck
             }
         }
     }
+
+    /// <summary>
+    /// The address a browser loads for a <c>&lt;picture&gt;</c>: the first <c>&lt;source&gt;</c>
+    /// in a format it shows, preferring one with no <c>media</c> condition, else the
+    /// <c>&lt;img&gt;</c> inside.
+    /// </summary>
+    /// <remarks>
+    /// A source for a media condition (<c>(max-width: 600px)</c>) is for some screens only, and
+    /// which screen is a guess sitecheck cannot make, so an unconditional one wins. If all are
+    /// conditional, the first is taken, which on a mobile-first page is the phone's.
+    /// </remarks>
+    private static string? PictureSource(string picture)
+    {
+        var sources = HtmlTags.Find(picture, "source")
+            .Where(source => source.ContainsKey("srcset") && BrowsersShow(source.GetValueOrDefault("type")))
+            .ToArray();
+
+        var chosen = sources.FirstOrDefault(source => !source.ContainsKey("media")) ?? sources.FirstOrDefault();
+
+        return chosen is not null
+            ? FirstCandidate(chosen["srcset"])
+            : HtmlTags.Find(picture, "img").Select(ImageSource).FirstOrDefault();
+    }
+
+    // Every current browser shows these. A source in another format, such as JPEG XL, is skipped
+    // the way most browsers skip it.
+    private static bool BrowsersShow(string? type) =>
+        string.IsNullOrWhiteSpace(type)
+        || type.Trim().ToLowerInvariant() is "image/webp" or "image/avif" or "image/jpeg" or "image/png" or "image/gif" or "image/svg+xml";
+
+    // The address the browser loads for an <img>: src, or failing that the first candidate of srcset.
+    private static string? ImageSource(IReadOnlyDictionary<string, string> image)
+    {
+        var source = image.GetValueOrDefault("src");
+
+        return string.IsNullOrWhiteSpace(source) && image.TryGetValue("srcset", out var srcset)
+            ? FirstCandidate(srcset)
+            : source;
+    }
+
+    private static string? FirstCandidate(string srcset) =>
+        srcset.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(candidate => candidate.Split(' ', 2)[0])
+            .FirstOrDefault();
+
+    [GeneratedRegex(
+        @"<picture\b.*?</picture\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Picture();
 
     private static Uri? Resolve(Uri page, string? value)
     {
