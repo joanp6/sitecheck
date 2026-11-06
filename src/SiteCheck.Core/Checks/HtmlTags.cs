@@ -21,11 +21,18 @@ internal static partial class HtmlTags
     /// When an attribute appears twice the first wins, as it does in a browser. An attribute with
     /// no value is absent from the result.
     /// </remarks>
-    public static IEnumerable<IReadOnlyDictionary<string, string>> Find(string html, string tagName)
+    public static IEnumerable<IReadOnlyDictionary<string, string>> Find(string html, string tagName) =>
+        Matching(html, name => string.Equals(name, tagName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Every tag in document order, whatever its name, as its attributes.</summary>
+    /// <remarks>For attributes that may sit on any element, such as microdata's <c>itemprop</c>.</remarks>
+    public static IEnumerable<IReadOnlyDictionary<string, string>> All(string html) => Matching(html, _ => true);
+
+    private static IEnumerable<IReadOnlyDictionary<string, string>> Matching(string html, Func<string, bool> wanted)
     {
         foreach (Match tag in Tag().Matches(html))
         {
-            if (!string.Equals(tag.Groups["name"].Value, tagName, StringComparison.OrdinalIgnoreCase))
+            if (!wanted(tag.Groups["name"].Value))
             {
                 continue;
             }

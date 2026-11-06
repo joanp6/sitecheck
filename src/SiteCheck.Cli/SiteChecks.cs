@@ -45,6 +45,7 @@ internal sealed class SiteChecks : IDisposable
             new MixedContentCheck(_httpClient),
             new ClickToCallCheck(_httpClient),
             new SearchSnippetCheck(_httpClient),
+            new LocalBusinessCheck(_httpClient),
         ];
 
         if (includePageSpeed)
