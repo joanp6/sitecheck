@@ -49,6 +49,7 @@ internal sealed class SiteChecks : IDisposable
             new LegalPagesCheck(_httpClient),
             new PageWeightCheck(_httpClient),
             new SharePreviewCheck(_httpClient),
+            new BookingLinkCheck(_httpClient),
         ];
 
         if (includePageSpeed)
