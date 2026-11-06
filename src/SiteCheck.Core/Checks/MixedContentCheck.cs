@@ -71,40 +71,19 @@ public sealed partial class MixedContentCheck : ISiteCheck
     {
         ArgumentNullException.ThrowIfNull(url);
 
-        string html;
-        Uri page;
-        bool upgradeHeader;
+        var (fetched, unread) = await PageReader
+            .ReadAsync(_httpClient, url, "read the page to look for insecure parts", cancellationToken)
+            .ConfigureAwait(false);
 
-        try
+        if (fetched is null)
         {
-            using var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            return unread!;
+        }
 
-            if (RobotBlock.TurnsRobotsAway(response.StatusCode))
-            {
-                return RobotBlock.Skip(response, "read the page to look for insecure parts");
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return CheckOutcome.Error(
-                    $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}), so there was no page to look for insecure parts in.")
-                    with { StatusCode = (int)response.StatusCode };
-            }
-
-            page = response.RequestMessage?.RequestUri ?? url;
-            upgradeHeader = response.Headers.TryGetValues("Content-Security-Policy", out var policies)
+        var page = fetched.Address;
+        var html = fetched.Html;
+        var upgradeHeader = fetched.Headers.TryGetValues("Content-Security-Policy", out var policies)
                             && policies.Any(UpgradesInsecureRequests);
-            html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return CheckOutcome.Error(
-                $"The site did not respond within {_httpClient.Timeout.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s, so its page could not be read.");
-        }
-        catch (HttpRequestException ex)
-        {
-            return CheckOutcome.Error($"The page could not be read: {ex.Message}");
-        }
 
         if (page.Scheme != Uri.UriSchemeHttps)
         {
