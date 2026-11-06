@@ -36,6 +36,7 @@ public static class HtmlReport
         ["search-snippet"] = "How Google shows the page",
         ["local-business"] = "Address and hours for Google",
         ["legal-pages"] = "Legal notice, privacy and cookies",
+        ["page-weight"] = "Page weight",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 

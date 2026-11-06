@@ -39,6 +39,17 @@ public sealed class CheckRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_CarriesTheWeightThroughToTheResult()
+    {
+        var outcome = CheckOutcome.Warn("Heavy.") with { Bytes = 3_456_789 };
+        var runner = new CheckRunner([StubCheck.Returning("page-weight", outcome)], new FakeTimeProvider());
+
+        var result = Assert.Single(await runner.RunAsync(Site, TestContext.Current.CancellationToken));
+
+        Assert.Equal(3_456_789, result.Bytes);
+    }
+
+    [Fact]
     public async Task RunAsync_CarriesTheOutcomeValuesThroughToTheResult()
     {
         // The runner adds the name and the timing; it must not quietly drop anything the
