@@ -35,6 +35,7 @@ public static class HtmlReport
         ["click-to-call"] = "Call or WhatsApp with one tap",
         ["search-snippet"] = "How Google shows the page",
         ["local-business"] = "Address and hours for Google",
+        ["legal-pages"] = "Legal notice, privacy and cookies",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 
