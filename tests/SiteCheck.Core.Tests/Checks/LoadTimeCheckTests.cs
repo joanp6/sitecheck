@@ -91,6 +91,26 @@ public sealed class LoadTimeCheckTests
     }
 
     [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task RunAsync_WhenTheSiteTurnsRobotsAway_SkipsInsteadOfCallingItADefect(HttpStatusCode status)
+    {
+        // A bot shield answers 403 or 429 to sitecheck while people open the page fine. Grading
+        // that as a failure would tell the owner their site is broken when it is not.
+        var clock = new FakeTimeProvider();
+        using var client = new HttpClient(
+            StubHttpMessageHandler.Responding(status, clock, TimeSpan.FromMilliseconds(90)));
+        var check = new LoadTimeCheck(client, clock);
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Skip, outcome.Status);
+        Assert.Equal((int)status, outcome.StatusCode);
+        Assert.Contains("turns automated visitors away", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)] // a password-protected page is what every visitor gets too
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.InternalServerError)]
     public async Task RunAsync_WhenTheSiteAnswersWithAnErrorStatus_FailsEvenIfItWasFast(HttpStatusCode status)
@@ -132,10 +152,49 @@ public sealed class LoadTimeCheckTests
 
         var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
 
-        Assert.Equal(CheckStatus.Fail, outcome.Status);
+        Assert.Equal(CheckStatus.Skip, outcome.Status);
         Assert.Equal(403, outcome.StatusCode);
         Assert.Null(outcome.Elapsed);
         Assert.Contains("answered 403", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenTheBodyBreaksOffAfterAnErrorStatus_StillFails()
+    {
+        using var client = new HttpClient(StubHttpMessageHandler.Routing(_ =>
+            new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new BrokenContent() }));
+        var check = new LoadTimeCheck(client, new FakeTimeProvider());
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Fail, outcome.Status);
+        Assert.Equal(500, outcome.StatusCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenTheBodyTimesOutAfterARobotBlock_SkipsInsteadOfCallingItSlow()
+    {
+        using var client = new HttpClient(StubHttpMessageHandler.Routing(_ =>
+            new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StalledContent() }));
+        var check = new LoadTimeCheck(client, new FakeTimeProvider());
+
+        var outcome = await check.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Skip, outcome.Status);
+        Assert.Equal(429, outcome.StatusCode);
+    }
+
+    /// <summary>A body that never finishes, as HttpClient reports it when its timeout fires.</summary>
+    private sealed class StalledContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) =>
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
     }
 
     /// <summary>A body whose connection drops part-way, as a real server's sometimes does.</summary>

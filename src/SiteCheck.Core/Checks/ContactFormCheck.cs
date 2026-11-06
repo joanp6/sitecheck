@@ -50,6 +50,11 @@ public sealed partial class ContactFormCheck : ISiteCheck
         {
             using var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
 
+            if (RobotBlock.TurnsRobotsAway(response.StatusCode))
+            {
+                return RobotBlock.Skip(response, "read the page to look for forms");
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 return CheckOutcome.Fail(

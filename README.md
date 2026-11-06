@@ -65,7 +65,7 @@ their own fields instead:
 | `durationMs` | every result | How long the check ran |
 | `validUntil` | `ssl-certificate`, `domain-expiry` | When the certificate or domain expires. Omitted when unknown |
 | `elapsedMs` | `load-time` | How long the page took to arrive in full, in whole milliseconds. Omitted when no answer came |
-| `statusCode` | `load-time` | The HTTP status the site answered with, errors included (a 403 or 429 usually means the site turns robots away, not that it is slow). Omitted when no response arrived |
+| `statusCode` | `load-time`; also `mobile-viewport`, `broken-links` and `contact-form` when they skip a site that turns robots away | The HTTP status the site answered with, errors included (a 403 or 429 means the site turns robots away, which is a `skip`, not a defect). Omitted when no response arrived |
 
 New fields are only ever added within format `1`, so reports written by older versions still read.
 
@@ -80,6 +80,12 @@ New fields are only ever added within format `1`, so reports written by older ve
 | SKIP | The question does not apply to this site, such as a domain on a registry that publishes no dates |
 
 A host that cannot be reached is a FAIL in every check, never an ERROR.
+
+A page that answers 403 or 429 is a SKIP in every check that reads it (`load-time`,
+`mobile-viewport`, `broken-links`, `contact-form`), never a FAIL: it is what a firewall or bot
+shield answers sitecheck while people open the page fine, so it says nothing about the business.
+The result carries `statusCode` so a script can say why the page went unchecked. A 401 still fails,
+since a page behind a password is what every visitor gets.
 
 ### Exit codes
 

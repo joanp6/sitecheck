@@ -42,6 +42,11 @@ public sealed class MobileCheck : ISiteCheck
         {
             using var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
 
+            if (RobotBlock.TurnsRobotsAway(response.StatusCode))
+            {
+                return RobotBlock.Skip(response, "read the page to check it on a phone");
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 return CheckOutcome.Fail(

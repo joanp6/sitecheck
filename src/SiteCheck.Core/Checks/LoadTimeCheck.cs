@@ -77,12 +77,13 @@ public sealed class LoadTimeCheck : ISiteCheck
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // HttpClient reports its own timeout as a cancellation. To a visitor this is
-            // indistinguishable from the site being down, so it is the site's failure.
-            return CheckOutcome.Fail($"The site did not respond within {Seconds(_httpClient.Timeout)}.") with { StatusCode = statusCode };
+            // indistinguishable from the site being down, so it is the site's failure, unless the
+            // headers already said the site turns robots away: then nobody timed a visitor's page.
+            return BlockedRobot(statusCode) ?? CheckOutcome.Fail($"The site did not respond within {Seconds(_httpClient.Timeout)}.") with { StatusCode = statusCode };
         }
         catch (HttpRequestException ex)
         {
-            return (statusCode is { } answered
+            return BlockedRobot(statusCode) ?? (statusCode is { } answered
                 ? CheckOutcome.Fail($"The site answered {answered} but the page stopped arriving: {ex.Message}")
                 : CheckOutcome.Fail($"The site could not be reached: {ex.Message}")) with { StatusCode = statusCode };
         }
@@ -90,6 +91,11 @@ public sealed class LoadTimeCheck : ISiteCheck
 
     private CheckOutcome Grade(HttpResponseMessage response, TimeSpan elapsed)
     {
+        if (RobotBlock.TurnsRobotsAway(response.StatusCode))
+        {
+            return RobotBlock.Skip(response, Unchecked);
+        }
+
         if (!response.IsSuccessStatusCode)
         {
             return CheckOutcome.Fail(
@@ -105,6 +111,15 @@ public sealed class LoadTimeCheck : ISiteCheck
             ? CheckOutcome.Warn($"The page took {Seconds(elapsed)} to load, over the {Seconds(_options.Warn)} target.")
             : CheckOutcome.Pass($"The page loaded in {Seconds(elapsed)}.");
     }
+
+    // A 403 or 429 arrives fast because nothing was built, so its time says nothing about the page
+    // a visitor gets. It is still reported as elapsedMs, but it grades nothing.
+    private const string Unchecked = "time the page a visitor gets";
+
+    private static CheckOutcome? BlockedRobot(int? statusCode) =>
+        statusCode is { } code && RobotBlock.TurnsRobotsAway((System.Net.HttpStatusCode)code)
+            ? RobotBlock.Skip(code, reasonPhrase: null, Unchecked)
+            : null;
 
     private static string Seconds(TimeSpan duration) =>
         $"{duration.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s";

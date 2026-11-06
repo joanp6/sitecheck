@@ -105,6 +105,18 @@ public sealed class MobileCheckTests
         Assert.Equal(CheckStatus.Fail, outcome.Status);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task RunAsync_WhenTheSiteTurnsRobotsAway_SkipsInsteadOfCallingItADefect(HttpStatusCode status)
+    {
+        // The block page has no viewport, but people in a browser never see it.
+        var outcome = await RunAgainst("<html><body>Access denied</body></html>", status);
+
+        Assert.Equal(CheckStatus.Skip, outcome.Status);
+        Assert.Equal((int)status, outcome.StatusCode);
+    }
+
     [Fact]
     public async Task RunAsync_WhenTheSiteAnswersWithAnError_FailsWithoutGradingTheErrorPage()
     {

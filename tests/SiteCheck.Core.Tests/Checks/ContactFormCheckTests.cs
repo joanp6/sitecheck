@@ -164,6 +164,19 @@ public sealed class ContactFormCheckTests
         Assert.Single(outcome.Detail.Split("mailto:", StringSplitOptions.None).Skip(1));
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task RunAsync_WhenThePageTurnsRobotsAway_SkipsInsteadOfCallingItADefect(HttpStatusCode status)
+    {
+        using var client = new HttpClient(StubHttpMessageHandler.Serving("Access denied", status));
+
+        var outcome = await new ContactFormCheck(client).RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Skip, outcome.Status);
+        Assert.Equal((int)status, outcome.StatusCode);
+    }
+
     [Fact]
     public async Task RunAsync_WhenThePageAnswersWithAnError_Fails()
     {
