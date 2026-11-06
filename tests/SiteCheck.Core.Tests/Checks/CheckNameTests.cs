@@ -41,6 +41,7 @@ public sealed class CheckNameTests : IDisposable
             new LegalPagesCheck(_httpClient),
             new PageWeightCheck(_httpClient),
             new SharePreviewCheck(_httpClient),
+            new BookingLinkCheck(_httpClient),
             new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 

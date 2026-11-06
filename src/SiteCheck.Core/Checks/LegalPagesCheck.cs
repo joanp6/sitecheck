@@ -1,6 +1,3 @@
-using System.Globalization;
-using System.Net;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace SiteCheck.Checks;
@@ -151,23 +148,8 @@ public sealed partial class LegalPagesCheck : ISiteCheck
 
     private sealed record Link(string Text, string Href);
 
-    private static IEnumerable<Link> Links(string html)
-    {
-        foreach (Match anchor in Anchor().Matches(html))
-        {
-            var attributes = HtmlTags.Find(anchor.Value, "a").FirstOrDefault();
-            var href = WebUtility.HtmlDecode(attributes?.GetValueOrDefault("href") ?? string.Empty);
-
-            // The words a visitor reads, plus the ones a screen reader does for an icon-only link.
-            var text = string.Join(
-                " ",
-                WebUtility.HtmlDecode(Tag().Replace(anchor.Groups["text"].Value, " ")),
-                attributes?.GetValueOrDefault("title") ?? string.Empty,
-                attributes?.GetValueOrDefault("aria-label") ?? string.Empty);
-
-            yield return new Link(Normalise(text), Normalise(PathOf(href)));
-        }
-    }
+    private static IEnumerable<Link> Links(string html) =>
+        Anchors.Find(html).Select(anchor => new Link(Anchors.Normalise(anchor.Text), Anchors.Normalise(PathOf(anchor.Href))));
 
     // The address without its host, so a domain such as privacy-first.test does not count.
     private static string PathOf(string href) =>
@@ -182,25 +164,6 @@ public sealed partial class LegalPagesCheck : ISiteCheck
     private static bool IsBareLegal(Link link) =>
         link.Text.Trim() == "legal" || LegalSegment().IsMatch(link.Href);
 
-    /// <summary>Lower case, accents dropped and separators turned to spaces, so "Política_de-Privacidad" reads "politica de privacidad".</summary>
-    private static string Normalise(string text)
-    {
-        var decomposed = text.ToLowerInvariant().Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder(decomposed.Length);
-
-        foreach (var c in decomposed)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
-            {
-                continue;
-            }
-
-            builder.Append(c is '-' or '_' or '.' or ' ' ? ' ' : c);
-        }
-
-        return Whitespace().Replace(builder.ToString(), " ");
-    }
-
     private static string Join(string[] items, string conjunction) => items.Length switch
     {
         1 => items[0],
@@ -210,18 +173,6 @@ public sealed partial class LegalPagesCheck : ISiteCheck
 
     [GeneratedRegex(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Comment();
-
-    [GeneratedRegex(
-        """<a(?=[\s>])(?:[^>"']|"[^"]*"|'[^']*')*>(?<text>.*?)</a\s*>""",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-        matchTimeoutMilliseconds: 1000)]
-    private static partial Regex Anchor();
-
-    [GeneratedRegex("<[^>]*>", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex Tag();
-
-    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex Whitespace();
 
     [GeneratedRegex(@"(^|/)legal(/|\s|\?|$)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex LegalSegment();

@@ -38,6 +38,7 @@ public static class HtmlReport
         ["legal-pages"] = "Legal notice, privacy and cookies",
         ["page-weight"] = "Page weight",
         ["share-preview"] = "Preview when shared, and icon",
+        ["booking-link"] = "Online booking and map",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 
