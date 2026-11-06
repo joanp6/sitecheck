@@ -38,6 +38,7 @@ public sealed class CheckNameTests : IDisposable
             new ClickToCallCheck(_httpClient),
             new SearchSnippetCheck(_httpClient),
             new LocalBusinessCheck(_httpClient),
+            new LegalPagesCheck(_httpClient),
             new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 
