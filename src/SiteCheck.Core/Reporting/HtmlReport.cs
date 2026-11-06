@@ -33,6 +33,7 @@ public static class HtmlReport
         ["contact-form"] = "Contact form",
         ["mixed-content"] = "Secure page contents",
         ["click-to-call"] = "Call or WhatsApp with one tap",
+        ["search-snippet"] = "How Google shows the page",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 

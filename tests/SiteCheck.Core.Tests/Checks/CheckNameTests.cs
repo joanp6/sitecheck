@@ -36,6 +36,7 @@ public sealed class CheckNameTests : IDisposable
             new ContactFormCheck(_httpClient),
             new MixedContentCheck(_httpClient),
             new ClickToCallCheck(_httpClient),
+            new SearchSnippetCheck(_httpClient),
             new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 

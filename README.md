@@ -24,8 +24,9 @@ sitecheck report for https://perruqueria-angela.pages.dev/
   SKIP   contact-form     The page has no form that sends anything, so there is nothing to check.
   PASS   mixed-content    Everything the page's HTML loads comes over https.
   PASS   click-to-call    Visitors on a phone can call with one tap and open a WhatsApp chat.
+  PASS   search-snippet   The page gives Google its own title, "Hair salon in Mataró", and a description to show in results.
 
-9 check(s): 7 passed, 0 warned, 0 failed, 0 errored, 2 skipped.
+10 check(s): 8 passed, 0 warned, 0 failed, 0 errored, 2 skipped.
 ```
 
 An address can be a bare host (`example.com`, read as `https://example.com/`) or a full `http://` /
@@ -67,7 +68,7 @@ their own fields instead:
 | `durationMs` | every result | How long the check ran |
 | `validUntil` | `ssl-certificate`, `domain-expiry` | When the certificate or domain expires. Omitted when unknown |
 | `elapsedMs` | `load-time` | How long the page took to arrive in full, in whole milliseconds. Omitted when no answer came |
-| `statusCode` | `load-time`; also `mobile-viewport`, `broken-links`, `contact-form`, `mixed-content` and `click-to-call` when they skip a site that turns robots away, and `mixed-content` and `click-to-call` when the page answers with an error | The HTTP status the site answered with, errors included (a 403 or 429 means the site turns robots away, which is a `skip`, not a defect). Omitted when no response arrived |
+| `statusCode` | `load-time`; also `mobile-viewport`, `broken-links`, `contact-form` and the checks added since (`mixed-content`, `click-to-call`, `search-snippet`) when they skip a site that turns robots away; the checks added since also when the page answers with an error | The HTTP status the site answered with, errors included (a 403 or 429 means the site turns robots away, which is a `skip`, not a defect). Omitted when no response arrived |
 
 New fields are only ever added within format `1`, so reports written by older versions still read.
 
@@ -82,12 +83,12 @@ New fields are only ever added within format `1`, so reports written by older ve
 | SKIP | The question does not apply to this site, such as a domain on a registry that publishes no dates |
 
 A host that cannot be reached is a FAIL in the original checks. Checks added since (`mixed-content`,
-`click-to-call`)
+`click-to-call`, `search-snippet`)
 report it as an ERROR instead: `load-time` already fails a site that is down, and saying it again
 in every new check would bury the real findings.
 
 A page that answers 403 or 429 is a SKIP in every check that reads it (`load-time`,
-`mobile-viewport`, `broken-links`, `contact-form`, `mixed-content`, `click-to-call`), never a FAIL: it is what a firewall or bot
+`mobile-viewport`, `broken-links`, `contact-form`, `mixed-content`, `click-to-call`, `search-snippet`), never a FAIL: it is what a firewall or bot
 shield answers sitecheck while people open the page fine, so it says nothing about the business.
 The result carries `statusCode` so a script can say why the page went unchecked. A 401 still fails,
 since a page behind a password is what every visitor gets.
@@ -117,6 +118,7 @@ A defect wins over a tooling error: if both happen, the exit code is 1.
 | `contact-form` | Forms that send (`method="post"` or `mailto:`) point at an address that exists, over https, and not through the visitor's mail program. **It never submits a form**, so it cannot confirm that messages arrive |
 | `mixed-content` | A secure page loads nothing over plain http. Scripts, stylesheets and frames over http fail, since browsers block them and the page shows up incomplete; images and media only warn, since browsers try https first. Reads the HTML only: addresses inside CSS files or added by script are not seen |
 | `click-to-call` | A visitor on a phone can call (`tel:`) or open WhatsApp (`wa.me`, `api.whatsapp.com/send`) with one tap. Neither only warns, and says which printed number to turn into a link; a link to no real number (`tel:` with nothing, a template's `123456789`) fails. Reads the given page only, usually the home page |
+| `search-snippet` | What Google shows in results: the page's `<title>` and `<meta name="description">`. No title fails. A template's title ("Home", "Document"…), one over 60 characters, no description, a template's or placeholder description, or one outside 50–160 characters warns |
 | `pagespeed` | Opt-in with `--pagespeed`: Google's mobile performance score for the whole page. Needs a free API key; see [docs/pagespeed.md](docs/pagespeed.md) |
 
 ## Watching sites every day
