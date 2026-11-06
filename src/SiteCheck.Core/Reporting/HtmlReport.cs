@@ -39,6 +39,7 @@ public static class HtmlReport
         ["page-weight"] = "Page weight",
         ["share-preview"] = "Preview when shared, and icon",
         ["booking-link"] = "Online booking and map",
+        ["copyright-year"] = "Copyright year",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 
