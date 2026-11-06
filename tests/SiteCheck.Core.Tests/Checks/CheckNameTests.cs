@@ -34,6 +34,9 @@ public sealed class CheckNameTests : IDisposable
             new HttpsRedirectCheck(_httpClient),
             new DomainExpiryCheck(_httpClient, TimeProvider.System),
             new ContactFormCheck(_httpClient),
+            new MixedContentCheck(_httpClient),
+            new ClickToCallCheck(_httpClient),
+            new SearchSnippetCheck(_httpClient),
             new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 
