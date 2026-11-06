@@ -30,8 +30,9 @@ sitecheck report for https://perruqueria-angela.pages.dev/
   PASS   page-weight      A first visit downloads 640 kB: the page and 14 of the images, scripts and stylesheets it names. That is light enough for a phone.
   PASS   share-preview    Shared on WhatsApp or Facebook, a link to the page shows its own title and picture, and the page has a favicon.
   PASS   booking-link     Visitors can book online through Booksy and find the shop on a map.
+  PASS   copyright-year   The page's copyright notice says 2026, which looks current.
 
-15 check(s): 13 passed, 0 warned, 0 failed, 0 errored, 2 skipped.
+16 check(s): 14 passed, 0 warned, 0 failed, 0 errored, 2 skipped.
 ```
 
 An address can be a bare host (`example.com`, read as `https://example.com/`) or a full `http://` /
@@ -73,7 +74,7 @@ their own fields instead:
 | `durationMs` | every result | How long the check ran |
 | `validUntil` | `ssl-certificate`, `domain-expiry` | When the certificate or domain expires. Omitted when unknown |
 | `elapsedMs` | `load-time` | How long the page took to arrive in full, in whole milliseconds. Omitted when no answer came |
-| `statusCode` | `load-time`; also `mobile-viewport`, `broken-links`, `contact-form` and the checks added since (`mixed-content`, `click-to-call`, `search-snippet`, `local-business`, `legal-pages`, `page-weight`, `share-preview`, `booking-link`) when they skip a site that turns robots away; the checks added since also when the page answers with an error | The HTTP status the site answered with, errors included (a 403 or 429 means the site turns robots away, which is a `skip`, not a defect). Omitted when no response arrived |
+| `statusCode` | `load-time`; also `mobile-viewport`, `broken-links`, `contact-form` and the checks added since (`mixed-content`, `click-to-call`, `search-snippet`, `local-business`, `legal-pages`, `page-weight`, `share-preview`, `booking-link`, `copyright-year`) when they skip a site that turns robots away; the checks added since also when the page answers with an error | The HTTP status the site answered with, errors included (a 403 or 429 means the site turns robots away, which is a `skip`, not a defect). Omitted when no response arrived |
 | `bytes` | `page-weight` | How much a first visit downloads: the HTML plus the images, scripts and stylesheets it names, as sent over the network (compressed). A floor: fonts and what scripts load are not counted |
 
 New fields are only ever added within format `1`, so reports written by older versions still read.
@@ -90,12 +91,12 @@ New fields are only ever added within format `1`, so reports written by older ve
 
 A host that cannot be reached is a FAIL in the original checks. Checks added since (`mixed-content`,
 `click-to-call`, `search-snippet`, `local-business`, `legal-pages`, `page-weight`, `share-preview`,
-`booking-link`)
+`booking-link`, `copyright-year`)
 report it as an ERROR instead: `load-time` already fails a site that is down, and saying it again
 in every new check would bury the real findings.
 
 A page that answers 403 or 429 is a SKIP in every check that reads it (`load-time`,
-`mobile-viewport`, `broken-links`, `contact-form`, `mixed-content`, `click-to-call`, `search-snippet`, `local-business`, `legal-pages`, `page-weight`, `share-preview`, `booking-link`), never a FAIL: it is what a firewall or bot
+`mobile-viewport`, `broken-links`, `contact-form`, `mixed-content`, `click-to-call`, `search-snippet`, `local-business`, `legal-pages`, `page-weight`, `share-preview`, `booking-link`, `copyright-year`), never a FAIL: it is what a firewall or bot
 shield answers sitecheck while people open the page fine, so it says nothing about the business.
 The result carries `statusCode` so a script can say why the page went unchecked. A 401 still fails,
 since a page behind a password is what every visitor gets.
@@ -131,6 +132,7 @@ A defect wins over a tooling error: if both happen, the exit code is 1.
 | `page-weight` | What a first visit downloads: the HTML and up to 60 images, scripts and stylesheets it names, each sized with a HEAD request. Warns on an image over 500 kB or a page over 3 MB; fails on an image over 2 MB or a page over 6 MB, naming the heaviest. Does not run the page, so fonts and what scripts load are not counted |
 | `share-preview` | A link shared on WhatsApp or Facebook unfolds into a preview: the page has an `og:image` (a full address that loads an image, not a web page), and a favicon (declared, or at `/favicon.ico`). Missing or broken warns, never fails; an address the site will not let sitecheck ask about concludes nothing |
 | `booking-link` | A visitor can book online (a link to, or widget from, Booksy, Treatwell, Fresha, Calendly…, or a link of the site's own that reads "Reservar cita", "Demana cita", "Book now"…) or find the shop on a map (Google Maps, Apple Maps, OpenStreetMap, Waze, `g.page`). Either one passes, saying what the other would add; neither warns. Never fails. Links are recognised, not followed |
+| `copyright-year` | The year next to ©, (c) or "Copyright" in the page's text (the later one of a range, the latest of several). Warns when it is 3 or more years old, since it makes the site look abandoned; never fails, since a kept site may simply never have updated its footer. No year, or one written by script, skips |
 | `pagespeed` | Opt-in with `--pagespeed`: Google's mobile performance score for the whole page. Needs a free API key; see [docs/pagespeed.md](docs/pagespeed.md) |
 
 ## Watching sites every day

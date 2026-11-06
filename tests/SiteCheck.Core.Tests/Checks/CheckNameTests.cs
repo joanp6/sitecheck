@@ -42,6 +42,7 @@ public sealed class CheckNameTests : IDisposable
             new PageWeightCheck(_httpClient),
             new SharePreviewCheck(_httpClient),
             new BookingLinkCheck(_httpClient),
+            new CopyrightYearCheck(_httpClient, TimeProvider.System),
             new PageSpeedCheck(_httpClient, apiKey: null),
         ];
 
