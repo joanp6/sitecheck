@@ -67,9 +67,8 @@ public sealed partial class CopyrightYearCheck : ISiteCheck
     {
         var text = WebUtility.HtmlDecode(Tag().Replace(Invisible().Replace(html, " "), " "));
 
-        var years = Notice().Matches(text)
-            .SelectMany(match => new[] { match.Groups["before"], match.Groups["from"], match.Groups["to"] })
-            .Where(group => group.Success)
+        var years = Mark().Matches(text)
+            .SelectMany(mark => YearsOf(text, mark))
             .Select(group => int.Parse(group.Value, CultureInfo.InvariantCulture))
             .Where(year => year >= EarliestYear && year <= thisYear + 1)
             .ToArray();
@@ -99,12 +98,52 @@ public sealed partial class CopyrightYearCheck : ISiteCheck
     [GeneratedRegex("<[^>]*>", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex Tag();
 
-    // "© 2019", "(c) 2015-2025", "Copyright © Salon Test 2019", and "2019 © Salon Test". Up to 60
-    // characters of name may sit between the mark and the year, but no other digits, so a phone
-    // number or a street number next to the notice is not read as part of it.
+    /// <summary>
+    /// The year a copyright mark stands for: the one after it, or only when there is none, the
+    /// one right before it.
+    /// </summary>
+    /// <remarks>
+    /// The year after the mark wins because tags are removed before reading. "Established 2010"
+    /// in one paragraph and "© 2026 Salon Test" in the footer become "Established 2010 © 2026
+    /// Salon Test", and taking 2010 as the notice would call a current site abandoned.
+    /// </remarks>
+    private static IEnumerable<Group> YearsOf(string text, Match mark)
+    {
+        var after = YearAfterMark().Match(text, mark.Index + mark.Length);
+
+        if (after.Success)
+        {
+            yield return after.Groups["from"];
+
+            if (after.Groups["to"].Success)
+            {
+                yield return after.Groups["to"];
+            }
+
+            yield break;
+        }
+
+        var before = YearBeforeMark().Match(text[..mark.Index]);
+
+        if (before.Success)
+        {
+            yield return before.Groups["year"];
+        }
+    }
+
+    [GeneratedRegex(@"©|\(c\)|\bcopyright\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Mark();
+
+    // "© 2019", "(c) 2015-2025", "Copyright © Salon Test 2019". Up to 60 characters of name may sit
+    // between the mark and the year, but no other digits, so a phone number or a street number
+    // next to the notice is not read as part of it. \G keeps it starting at the mark.
     [GeneratedRegex(
-        @"(?:(?<!\d)(?<before>(?:19|20)\d{2})\s*(?:©|\(c\)))|(?:(?:©|\(c\)|\bcopyright\b)[^\d]{0,60}?(?<!\d)(?<from>(?:19|20)\d{2})(?!\d)(?:\s*[-–—/]\s*(?<to>(?:19|20)\d{2})(?!\d))?)",
+        @"\G[^\d]{0,60}?(?<!\d)(?<from>(?:19|20)\d{2})(?!\d)(?:\s*[-–—/]\s*(?<to>(?:19|20)\d{2})(?!\d))?",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 1000)]
-    private static partial Regex Notice();
+    private static partial Regex YearAfterMark();
+
+    // "2019 © Salon Test": a year with nothing but spaces between it and the mark.
+    [GeneratedRegex(@"(?<!\d)(?<year>(?:19|20)\d{2})\s*$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex YearBeforeMark();
 }

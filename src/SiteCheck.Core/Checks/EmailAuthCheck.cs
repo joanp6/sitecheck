@@ -30,6 +30,9 @@ namespace SiteCheck.Checks;
 /// </remarks>
 public sealed class EmailAuthCheck : ISiteCheck
 {
+    // DMARCbis caps its walk at eight lookups; the domain's own is the first of them.
+    private const int MaxTreeWalk = 7;
+
     private readonly IDnsResolver _dns;
 
     public EmailAuthCheck(IDnsResolver dns)
@@ -67,7 +70,7 @@ public sealed class EmailAuthCheck : ISiteCheck
         }
 
         string[] spf;
-        string[] dmarc;
+        DmarcPolicy dmarc;
         bool receivesMail;
 
         try
@@ -85,7 +88,7 @@ public sealed class EmailAuthCheck : ISiteCheck
             return CheckOutcome.Error($"The DNS could not be asked about {domain}'s mail settings: {ex.Message}");
         }
 
-        if (!receivesMail && spf.Length == 0 && dmarc.Length == 0)
+        if (!receivesMail && spf.Length == 0 && dmarc.Records.Length == 0)
         {
             return CheckOutcome.Skip(
                 $"{domain} has no mail set up (no MX, SPF or DMARC record), so there is no mailbox for forged mail to imitate. If it should never send mail, \"v=spf1 -all\" and a DMARC record with \"p=reject\" make that explicit.");
@@ -94,58 +97,86 @@ public sealed class EmailAuthCheck : ISiteCheck
         return Evaluate(domain, spf, dmarc);
     }
 
+    /// <summary>The DMARC records that govern a domain, and where they were found.</summary>
+    /// <param name="Records">The DMARC records found, none, one, or (wrongly) several.</param>
+    /// <param name="Source">The domain whose <c>_dmarc</c> name holds them.</param>
+    /// <param name="Inherited">They belong to a parent domain, so its <c>sp=</c> applies.</param>
+    private sealed record DmarcPolicy(string[] Records, string Source, bool Inherited);
+
     /// <summary>
-    /// The DMARC records for <paramref name="domain"/>: its own, or its parent's when it has none,
-    /// as receivers look one level up for a subdomain (mail.salon.es falls under salon.es).
+    /// The DMARC records for <paramref name="domain"/>: its own, or else the nearest parent's,
+    /// found by walking up the DNS tree one label at a time.
     /// </summary>
-    private async Task<string[]> DmarcAsync(string domain, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The walk is how DMARC's revision (DMARCbis) finds the policy of a subdomain, replacing the
+    /// public suffix list RFC 7489 relied on: shop.eu.salon.es with no record of its own falls
+    /// under eu.salon.es if that has one, else salon.es, and so on up. It needs no list of
+    /// suffixes, so co.uk and com.es need no special case. Receivers still on RFC 7489 differ
+    /// only when an intermediate subdomain publishes a record of its own, which is rare. Like
+    /// DMARCbis, the walk is capped, so a very long name costs at most eight lookups.
+    /// </remarks>
+    private async Task<DmarcPolicy> DmarcAsync(string domain, CancellationToken cancellationToken)
     {
         var own = await _dns.QueryAsync("_dmarc." + domain, DnsRecordType.Txt, cancellationToken).ConfigureAwait(false);
         var records = own.Records.Where(IsDmarc).ToArray();
 
-        if (records.Length > 0 || domain.Count(c => c == '.') < 2)
+        if (records.Length > 0)
         {
-            return records;
+            return new DmarcPolicy(records, domain, Inherited: false);
         }
 
-        var parent = domain[(domain.IndexOf('.', StringComparison.Ordinal) + 1)..];
-        var inherited = await _dns.QueryAsync("_dmarc." + parent, DnsRecordType.Txt, cancellationToken).ConfigureAwait(false);
+        var labels = domain.Split('.');
 
-        return [.. inherited.Records.Where(IsDmarc)];
+        for (var skip = 1; skip < labels.Length && skip <= MaxTreeWalk; skip++)
+        {
+            var parent = string.Join('.', labels[skip..]);
+            var answer = await _dns.QueryAsync("_dmarc." + parent, DnsRecordType.Txt, cancellationToken).ConfigureAwait(false);
+            var found = answer.Records.Where(IsDmarc).ToArray();
+
+            if (found.Length > 0)
+            {
+                return new DmarcPolicy(found, parent, Inherited: true);
+            }
+        }
+
+        return new DmarcPolicy([], domain, Inherited: false);
     }
 
-    private static CheckOutcome Evaluate(string domain, string[] spf, string[] dmarc)
+    private static CheckOutcome Evaluate(string domain, string[] spf, DmarcPolicy dmarc)
     {
         var fails = new List<string>();
         var warns = new List<string>();
 
-        if (dmarc.Length == 0)
+        // A record inherited from a parent says what to do with its subdomains in sp=, and
+        // falls back to p= only when sp= is absent (RFC 7489, 6.3).
+        var tag = dmarc.Inherited && dmarc.Records.Length == 1 && Tags(dmarc.Records[0]).ContainsKey("sp") ? "sp" : "p";
+        var whose = dmarc.Inherited ? $"The DMARC record {domain} inherits from {dmarc.Source}" : $"{domain}'s DMARC record";
+        var policy = dmarc.Records.Length == 1 ? Tags(dmarc.Records[0]).GetValueOrDefault(tag)?.ToLowerInvariant() : null;
+
+        if (dmarc.Records.Length == 0)
         {
             fails.Add($"{domain} has no DMARC record, so Gmail, Outlook and other providers deliver mail forged in its name as if it were real. Anyone can email the business's customers from an address that looks like its own.");
         }
-        else if (dmarc.Length > 1)
+        else if (dmarc.Records.Length > 1)
         {
-            fails.Add($"{domain} has {dmarc.Length} DMARC records; receivers ignore DMARC when there is more than one, so forged mail is delivered. Keep one.");
+            fails.Add($"{dmarc.Source} has {dmarc.Records.Length} DMARC records; receivers ignore DMARC when there is more than one, so forged mail is delivered. Keep one.");
         }
         else
         {
-            var tags = Tags(dmarc[0]);
-            var policy = tags.GetValueOrDefault("p")?.ToLowerInvariant();
-
             switch (policy)
             {
                 case "reject" or "quarantine":
-                    if (tags.TryGetValue("pct", out var pct) && int.TryParse(pct, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var percent) && percent is >= 0 and < 100)
+                    if (Tags(dmarc.Records[0]).TryGetValue("pct", out var pct) && int.TryParse(pct, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var percent) && percent is >= 0 and < 100)
                     {
-                        warns.Add($"{domain}'s DMARC policy ({policy}) applies to only {percent} % of forged mail (pct={percent}); the rest is delivered. Remove pct or set it to 100.");
+                        warns.Add($"{whose} applies its policy ({tag}={policy}) to only {percent} % of forged mail (pct={percent}); the rest is delivered. Remove pct or set it to 100.");
                     }
 
                     break;
                 case "none":
-                    warns.Add($"{domain}'s DMARC policy is p=none, which only reports forged mail and still delivers it. Once the reports show the real mail passing, change it to p=quarantine or p=reject.");
+                    warns.Add($"{whose} says {tag}=none, which only reports forged mail and still delivers it. Once the reports show the real mail passing, change it to {tag}=quarantine or {tag}=reject.");
                     break;
                 default:
-                    warns.Add($"{domain}'s DMARC record does not say what to do with forged mail (no valid p=), so receivers treat it as p=none and deliver it.");
+                    warns.Add($"{whose} does not say what to do with forged mail (no valid {tag}=), so receivers treat it as none and deliver it.");
                     break;
             }
         }
@@ -175,9 +206,10 @@ public sealed class EmailAuthCheck : ISiteCheck
             return CheckOutcome.Warn(string.Join(" ", warns) + dkim);
         }
 
-        var outcome = Tags(dmarc[0])["p"].ToLowerInvariant() == "reject" ? "rejected" : "sent to spam";
+        var outcome = policy == "reject" ? "rejected" : "sent to spam";
+        var source = dmarc.Inherited ? $", inherited from {dmarc.Source}" : string.Empty;
 
-        return CheckOutcome.Pass($"Mail forged in {domain}'s name is {outcome}: it publishes SPF and an enforced DMARC policy.{dkim}");
+        return CheckOutcome.Pass($"Mail forged in {domain}'s name is {outcome}: it publishes SPF and an enforced DMARC policy{source}.{dkim}");
     }
 
     private static bool IsSpf(string record) => StartsWithVersion(record, "v=spf1");

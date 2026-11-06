@@ -168,6 +168,60 @@ public sealed class EmailAuthCheckTests
     }
 
     [Fact]
+    public async Task RunAsync_ForADeepSubdomain_WalksUpToTheNearestDmarcRecord()
+    {
+        // No record at shop.eu.salon.test or eu.salon.test: the policy is salon.test's.
+        var dns = new FakeDnsResolver()
+            .Mx("shop.eu.salon.test", "mx1.mail.test")
+            .Txt("shop.eu.salon.test", Spf)
+            .Txt("_dmarc.salon.test", "v=DMARC1; p=reject");
+
+        var outcome = await Run(dns, new Uri("https://shop.eu.salon.test/"));
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.Contains("inherited from salon.test", outcome.Detail, StringComparison.Ordinal);
+        Assert.Contains("Txt _dmarc.eu.salon.test", dns.Questions);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenTheInheritedRecordMonitorsSubdomainsOnly_WarnsAboutSp()
+    {
+        // p=reject protects salon.test itself; its subdomains get sp=none.
+        var dns = new FakeDnsResolver()
+            .Mx("shop.salon.test", "mx1.mail.test")
+            .Txt("shop.salon.test", Spf)
+            .Txt("_dmarc.salon.test", "v=DMARC1; p=reject; sp=none");
+
+        var outcome = await Run(dns, new Uri("https://shop.salon.test/"));
+
+        Assert.Equal(CheckStatus.Warn, outcome.Status);
+        Assert.Contains("inherits from salon.test says sp=none", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenTheInheritedRecordEnforcesSubdomains_PassesWhateverItsOwnPolicy()
+    {
+        var dns = new FakeDnsResolver()
+            .Mx("shop.salon.test", "mx1.mail.test")
+            .Txt("shop.salon.test", Spf)
+            .Txt("_dmarc.salon.test", "v=DMARC1; p=none; sp=reject");
+
+        var outcome = await Run(dns, new Uri("https://shop.salon.test/"));
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.Contains("is rejected", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_OnTheDomainItself_IgnoresSp()
+    {
+        // sp= is for subdomains; the domain's own mail follows p=.
+        var outcome = await Run(Domain("v=DMARC1; p=reject; sp=none"));
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+    }
+
+    [Fact]
     public async Task RunAsync_ForASubdomainWithoutItsOwnDmarc_UsesTheParents()
     {
         var dns = new FakeDnsResolver()
