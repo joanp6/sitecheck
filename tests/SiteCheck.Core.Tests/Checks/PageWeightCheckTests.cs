@@ -240,6 +240,94 @@ public sealed class PageWeightCheckTests
     }
 
     [Fact]
+    public async Task RunAsync_InAPicture_WeighsTheSourceTheBrowserLoadsNotTheFallback()
+    {
+        // The case that found this: a light WebP for every browser, a heavy JPEG for old ones.
+        var site = new FakeSite(
+            Page("""<picture><source srcset="/foto.webp" type="image/webp"><img src="/foto.jpeg" alt="Portrait"></picture>"""),
+            new() { ["https://salon.test/foto.webp"] = 220_000, ["https://salon.test/foto.jpeg"] = 900_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.Contains(site.Requests, r => r.StartsWith("HEAD https://salon.test/foto.webp", StringComparison.Ordinal));
+        Assert.DoesNotContain(site.Requests, r => r.Contains("foto.jpeg", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_InAPicture_StillWarnsWhenTheSourceItselfIsHeavy()
+    {
+        var site = new FakeSite(
+            Page("""<picture><source srcset="/hero.avif 1x, /hero@2x.avif 2x" type="image/avif"><img src="/hero.jpg"></picture>"""),
+            new() { ["https://salon.test/hero.avif"] = 800_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Warn, outcome.Status);
+        Assert.Contains("hero.avif (800 kB)", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_InAPicture_PrefersTheSourceWithNoMediaCondition()
+    {
+        var site = new FakeSite(
+            Page("""
+                <picture>
+                  <source media="(min-width: 1200px)" srcset="/wide.webp">
+                  <source srcset="/any.webp" type="image/webp">
+                  <img src="/fallback.jpg">
+                </picture>
+                """),
+            new() { ["https://salon.test/any.webp"] = 100_000, ["https://salon.test/wide.webp"] = 900_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.Contains(site.Requests, r => r.Contains("any.webp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_InAPicture_SkipsAFormatMostBrowsersCannotShow()
+    {
+        // JPEG XL is shown by too few browsers to be what a visitor downloads.
+        var site = new FakeSite(
+            Page("""<picture><source srcset="/a.jxl" type="image/jxl"><source srcset="/a.webp" type="image/webp"><img src="/a.jpg"></picture>"""),
+            new() { ["https://salon.test/a.webp"] = 100_000, ["https://salon.test/a.jxl"] = 900_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Pass, outcome.Status);
+        Assert.DoesNotContain(site.Requests, r => r.Contains("a.jxl", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_InAPictureWithNoUsableSource_WeighsTheImg()
+    {
+        var site = new FakeSite(
+            Page("""<picture><source srcset="/a.jxl" type="image/jxl"><img src="/a.jpg"></picture>"""),
+            new() { ["https://salon.test/a.jpg"] = 900_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Warn, outcome.Status);
+        Assert.Contains("a.jpg (900 kB)", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ImagesOutsideAPictureAreStillWeighed()
+    {
+        var site = new FakeSite(
+            Page("""<picture><source srcset="/a.webp" type="image/webp"><img src="/a.jpg"></picture><img src="/b.jpg">"""),
+            new() { ["https://salon.test/a.webp"] = 100_000, ["https://salon.test/b.jpg"] = 900_000 });
+
+        var outcome = await Run(site);
+
+        Assert.Equal(CheckStatus.Warn, outcome.Status);
+        Assert.Contains("b.jpg (900 kB)", outcome.Detail, StringComparison.Ordinal);
+        Assert.Contains("2 of the images", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_WeighsNoMoreThanTheLimitOfParts()
     {
         var images = Enumerable.Range(1, PageWeightCheck.MaxParts + 10).ToDictionary(i => $"https://salon.test/{i}.png", _ => 1_000L);
