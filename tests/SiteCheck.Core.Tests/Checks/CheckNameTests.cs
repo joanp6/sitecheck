@@ -33,6 +33,7 @@ public sealed class CheckNameTests : IDisposable
             new BrokenLinksCheck(_httpClient),
             new HttpsRedirectCheck(_httpClient),
             new DomainExpiryCheck(_httpClient, TimeProvider.System),
+            new EmailAuthCheck(new FakeDnsResolver()),
             new ContactFormCheck(_httpClient),
             new MixedContentCheck(_httpClient),
             new ClickToCallCheck(_httpClient),

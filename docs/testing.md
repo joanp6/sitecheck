@@ -4,7 +4,7 @@ Two suites, two different meanings when they go red.
 
 | | `tests/SiteCheck.Core.Tests` | `tests/SiteCheck.Core.IntegrationTests` |
 |---|---|---|
-| What it covers | All logic: check policies, the runner | `SslStreamCertificateProvider`, the TLS I/O adapter |
+| What it covers | All logic: check policies, the runner | `SslStreamCertificateProvider` and `UdpDnsResolver`, the TLS and DNS I/O adapters |
 | Network | None | Real sockets, third-party hosts |
 | Speed | ~1 s | ~5 s, at the mercy of the internet |
 | Runs by default | Yes | No |

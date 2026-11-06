@@ -1,5 +1,6 @@
 using SiteCheck.Certificates;
 using SiteCheck.Checks;
+using SiteCheck.Dns;
 using SiteCheck.Running;
 
 namespace SiteCheck.Cli;
@@ -38,6 +39,7 @@ internal sealed class SiteChecks : IDisposable
             new SslCertificateCheck(new SslStreamCertificateProvider(), TimeProvider.System),
             new HttpsRedirectCheck(_httpClient),
             new DomainExpiryCheck(_httpClient, TimeProvider.System),
+            new EmailAuthCheck(new UdpDnsResolver()),
             new LoadTimeCheck(_firstVisitClient, TimeProvider.System),
             new MobileCheck(_httpClient),
             new BrokenLinksCheck(_httpClient),

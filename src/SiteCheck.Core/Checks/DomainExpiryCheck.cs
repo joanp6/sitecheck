@@ -34,16 +34,6 @@ public sealed class DomainExpiryCheck : ISiteCheck
     /// <summary>Where IANA publishes which RDAP server answers for which top-level domain.</summary>
     public static readonly Uri BootstrapUrl = new("https://data.iana.org/rdap/dns.json");
 
-    // Addresses a platform hands out under its own domain. The owner of such a site renews
-    // nothing, and reporting the platform's own renewal date as theirs would be misleading.
-    private static readonly string[] HostingPlatformDomains =
-    [
-        "pages.dev", "workers.dev", "github.io", "netlify.app", "vercel.app", "web.app", "firebaseapp.com",
-        "herokuapp.com", "azurewebsites.net", "azurestaticapps.net", "onrender.com", "fly.dev", "wixsite.com",
-        "blogspot.com", "wordpress.com", "weebly.com", "square.site", "myshopify.com", "godaddysites.com",
-        "webflow.io", "framer.website", "carrd.co", "surge.sh", "glitch.me", "replit.app",
-    ];
-
     private readonly HttpClient _httpClient;
     private readonly TimeProvider _timeProvider;
     private readonly DomainExpiryCheckOptions _options;
@@ -82,8 +72,7 @@ public sealed class DomainExpiryCheck : ISiteCheck
             return CheckOutcome.Skip($"{host} is not a registered domain name.");
         }
 
-        var platform = HostingPlatformDomains.FirstOrDefault(
-            domain => host == domain || host.EndsWith("." + domain, StringComparison.Ordinal));
+        var platform = HostingPlatforms.Find(host);
 
         if (platform is not null)
         {
