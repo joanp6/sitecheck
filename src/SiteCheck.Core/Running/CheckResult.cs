@@ -24,6 +24,9 @@ namespace SiteCheck.Running;
 /// <param name="StatusCode">
 /// The HTTP status the site answered with, when the check made a request and got a response.
 /// </param>
+/// <param name="Bytes">
+/// How many bytes the check weighed, when it weighed something; see <see cref="CheckOutcome.Bytes"/>.
+/// </param>
 public sealed record CheckResult(
     string CheckName,
     CheckStatus Status,
@@ -31,4 +34,5 @@ public sealed record CheckResult(
     TimeSpan Duration,
     DateTimeOffset? ValidUntil = null,
     TimeSpan? Elapsed = null,
-    int? StatusCode = null);
+    int? StatusCode = null,
+    long? Bytes = null);

@@ -67,6 +67,22 @@ public sealed class JsonReportTests
     }
 
     [Fact]
+    public void Render_WritesTheWeightAsANumberAndReadsItBack()
+    {
+        var weighed = new SiteReport(
+            new Site(new Uri("https://a.test/")),
+            At,
+            [new CheckResult("page-weight", CheckStatus.Warn, "Heavy.", TimeSpan.FromMilliseconds(400), Bytes: 3_456_789)]);
+
+        using var document = JsonDocument.Parse(JsonReport.Render([weighed]));
+        var result = document.RootElement.GetProperty("sites")[0].GetProperty("results")[0];
+
+        Assert.Equal(JsonValueKind.Number, result.GetProperty("bytes").ValueKind);
+        Assert.Equal(3_456_789, result.GetProperty("bytes").GetInt64());
+        Assert.Equal(weighed.Results, Assert.Single(JsonReport.Parse(JsonReport.Render([weighed]))).Results);
+    }
+
+    [Fact]
     public void Render_OmitsFieldsThatDoNotApply()
     {
         var unnamed = Sample() with { Site = new Site(new Uri("https://a.test/")) };
@@ -78,6 +94,7 @@ public sealed class JsonReportTests
         Assert.False(site.GetProperty("results")[1].TryGetProperty("validUntil", out _));
         Assert.False(site.GetProperty("results")[0].TryGetProperty("elapsedMs", out _));
         Assert.False(site.GetProperty("results")[0].TryGetProperty("statusCode", out _));
+        Assert.False(site.GetProperty("results")[0].TryGetProperty("bytes", out _));
     }
 
     [Fact]

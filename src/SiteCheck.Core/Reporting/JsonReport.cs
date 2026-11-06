@@ -52,7 +52,8 @@ namespace SiteCheck.Reporting;
 /// the site (for <c>load-time</c>, how long the page took to arrive in full). <c>statusCode</c> is
 /// the HTTP status the site answered with, error statuses included, so a reader can tell a site
 /// that turns robots away (403, 429, graded <c>skip</c> by every check that reads the page) from
-/// one that is slow or broken. Fields are only ever added within a
+/// one that is slow or broken. <c>bytes</c>, on <c>page-weight</c>, is how much the page and the
+/// parts it loads weighed, in bytes as sent over the network. Fields are only ever added within a
 /// format, so older files without them stay readable.
 /// </para>
 /// </remarks>
@@ -157,6 +158,11 @@ public static class JsonReport
                 json.WriteNumber("statusCode", statusCode);
             }
 
+            if (result.Bytes is { } bytes)
+            {
+                json.WriteNumber("bytes", bytes);
+            }
+
             json.WriteEndObject();
         }
 
@@ -182,7 +188,8 @@ public static class JsonReport
         TimeSpan.FromMilliseconds(result.GetProperty("durationMs").GetInt64()),
         result.TryGetProperty("validUntil", out var validUntil) ? validUntil.GetDateTimeOffset() : null,
         result.TryGetProperty("elapsedMs", out var elapsed) ? TimeSpan.FromMilliseconds(elapsed.GetInt64()) : null,
-        result.TryGetProperty("statusCode", out var statusCode) ? statusCode.GetInt32() : null);
+        result.TryGetProperty("statusCode", out var statusCode) ? statusCode.GetInt32() : null,
+        result.TryGetProperty("bytes", out var bytes) ? bytes.GetInt64() : null);
 
     private static CheckStatus ParseStatus(string? name) =>
         Enum.TryParse<CheckStatus>(name, ignoreCase: true, out var status) && Enum.IsDefined(status) && !int.TryParse(name, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)

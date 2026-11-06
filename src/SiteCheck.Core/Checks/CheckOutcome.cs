@@ -48,6 +48,12 @@ public sealed record CheckOutcome(CheckStatus Status, string Detail)
     /// </remarks>
     public int? StatusCode { get; init; }
 
+    /// <summary>
+    /// How many bytes the check measured, for checks that weigh something: the page and the parts
+    /// it loads, for <c>page-weight</c>. <see langword="null"/> when nothing was weighed.
+    /// </summary>
+    public long? Bytes { get; init; }
+
     public static CheckOutcome Pass(string detail) => new(CheckStatus.Pass, detail);
 
     public static CheckOutcome Warn(string detail) => new(CheckStatus.Warn, detail);
