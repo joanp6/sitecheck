@@ -66,7 +66,14 @@ public sealed class LoadTimeCheck : ISiteCheck
 
             // Drain the body before stopping the clock: headers can arrive quickly in
             // front of a page that then takes seconds to finish streaming.
-            _ = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            // Read and thrown away rather than kept: only the time matters here, and holding the
+            // body would let an address that serves gigabytes fill memory.
+            var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (body.ConfigureAwait(false))
+            {
+                await body.CopyToAsync(Stream.Null, cancellationToken).ConfigureAwait(false);
+            }
 
             var elapsed = _timeProvider.GetElapsedTime(startedAt);
 

@@ -53,6 +53,11 @@ public sealed class MobileCheck : ISiteCheck
                     $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}), so there was no page to check on a phone.");
             }
 
+            if (PageContent.SkipUnlessPage(response, "read the page to check it on a phone") is { } notAPage)
+            {
+                return notAPage;
+            }
+
             html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)

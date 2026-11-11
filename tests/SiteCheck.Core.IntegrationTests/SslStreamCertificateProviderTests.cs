@@ -16,7 +16,8 @@ namespace SiteCheck.Core.IntegrationTests;
 /// </remarks>
 public sealed class SslStreamCertificateProviderTests
 {
-    private static readonly SslStreamCertificateProvider Provider = new();
+    // Some of these tests dial a listener on this machine, which the provider refuses unless told.
+    private static readonly SslStreamCertificateProvider Provider = new(allowPrivateAddresses: true);
 
     [Fact]
     public async Task GetAsync_AgainstAHealthyHost_ReturnsATrustedCertificate()
@@ -102,7 +103,7 @@ public sealed class SslStreamCertificateProviderTests
         IntegrationGate.RequireEnabled();
 
         using var wedgedHost = new BlackHoleListener();
-        var provider = new SslStreamCertificateProvider(TimeSpan.FromMilliseconds(500));
+        var provider = new SslStreamCertificateProvider(TimeSpan.FromMilliseconds(500), allowPrivateAddresses: true);
 
         // No token deadline at all: without a timeout of its own this would hang forever.
         await Assert.ThrowsAsync<TimeoutException>(

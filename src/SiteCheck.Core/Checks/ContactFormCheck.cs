@@ -61,6 +61,11 @@ public sealed partial class ContactFormCheck : ISiteCheck
                     $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}), so there was no page to look for forms on.");
             }
 
+            if (PageContent.SkipUnlessPage(response, "read the page to look for forms") is { } notAPage)
+            {
+                return notAPage;
+            }
+
             page = response.RequestMessage?.RequestUri ?? url;
             html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }

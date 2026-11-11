@@ -24,6 +24,17 @@ internal sealed class StubCheck : ISiteCheck
 
     public static StubCheck Returning(string name, CheckOutcome outcome) => new(name, () => outcome);
 
+    /// <summary>A check that changes its mind: one outcome per run, the last one from then on.</summary>
+    public static StubCheck ReturningInTurn(string name, params CheckOutcome[] outcomes)
+    {
+        var run = 0;
+
+        return new(name, () => outcomes[Math.Min(run++, outcomes.Length - 1)]);
+    }
+
+    /// <summary>A check whose every run is decided by <paramref name="behaviour"/>.</summary>
+    public static StubCheck Deciding(string name, Func<CheckOutcome> behaviour) => new(name, behaviour);
+
     public static StubCheck Throwing(string name, Exception exception) => new(name, () => throw exception);
 
     /// <summary>A check that appears to take <paramref name="duration"/> without waiting.</summary>

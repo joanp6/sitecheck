@@ -42,6 +42,35 @@ var pageSpeedOption = new Option<bool>("--pagespeed")
         + "takes up to a minute per site, and needs a free API key in SITECHECK_PAGESPEED_KEY. See docs/pagespeed.md.",
 };
 
+// One option object on both commands: it means the same thing in each.
+var allowPrivateOption = new Option<bool>("--allow-private")
+{
+    Description = "Also connect to this machine and to private networks (localhost, 192.168.x.x, 10.x.x.x...). "
+        + "Off by default, so that a page cannot send sitecheck to look behind your firewall. "
+        + "Use it to audit a site of your own that is not on the internet yet.",
+};
+
+var noRetryOption = new Option<bool>("--no-retry")
+{
+    Description = "Believe a failure the first time. By default a check that fails or errors is run once more "
+        + "two seconds later, so a dropped connection is not reported as a broken site. "
+        + "Faster against a site you already know is down.",
+};
+
+var concurrencyOption = new Option<int>("--concurrency")
+{
+    Description = "How many sites to audit at the same time. Sites on the same host are never audited together, "
+        + "and the checks of one site always run in order. 1 audits the sites one after another.",
+    DefaultValueFactory = _ => SiteBatch.DefaultConcurrency,
+};
+concurrencyOption.Validators.Add(result =>
+{
+    if (result.GetValueOrDefault<int>() < 1)
+    {
+        result.AddError("--concurrency must be 1 or more.");
+    }
+});
+
 var audit = new Command("audit", "Audit one or more sites once and report what was found.")
 {
     urlsArgument,
@@ -49,6 +78,9 @@ var audit = new Command("audit", "Audit one or more sites once and report what w
     formatOption,
     outputOption,
     pageSpeedOption,
+    allowPrivateOption,
+    noRetryOption,
+    concurrencyOption,
 };
 
 audit.SetAction(async (parse, cancellationToken) =>
@@ -60,16 +92,11 @@ audit.SetAction(async (parse, cancellationToken) =>
         return ExitCodes.Usage;
     }
 
-    using var checks = new SiteChecks(includePageSpeed: parse.GetValue(pageSpeedOption));
+    using var checks = new SiteChecks(includePageSpeed: parse.GetValue(pageSpeedOption), allowPrivate: parse.GetValue(allowPrivateOption), retry: !parse.GetValue(noRetryOption));
 
     try
     {
-        var reports = new List<SiteReport>(sites.Count);
-
-        foreach (var site in sites)
-        {
-            reports.Add(await checks.Runner.AuditAsync(site, cancellationToken));
-        }
+        var reports = await SiteBatch.AuditAsync(sites, checks.AuditAsync, parse.GetValue(concurrencyOption), cancellationToken);
 
         var report = parse.GetValue(formatOption) switch
         {
@@ -108,6 +135,9 @@ var watch = new Command(
 {
     watchSitesOption,
     stateOption,
+    allowPrivateOption,
+    noRetryOption,
+    concurrencyOption,
 };
 
 watch.SetAction(async (parse, cancellationToken) =>
@@ -135,16 +165,11 @@ watch.SetAction(async (parse, cancellationToken) =>
         return ExitCodes.Usage;
     }
 
-    using var checks = new SiteChecks();
+    using var checks = new SiteChecks(allowPrivate: parse.GetValue(allowPrivateOption), retry: !parse.GetValue(noRetryOption));
 
     try
     {
-        var reports = new List<SiteReport>(sites.Count);
-
-        foreach (var site in sites)
-        {
-            reports.Add(await checks.Runner.AuditAsync(site, cancellationToken));
-        }
+        var reports = await SiteBatch.AuditAsync(sites, checks.AuditAsync, parse.GetValue(concurrencyOption), cancellationToken);
 
         var comparison = WatchComparison.Of(previous, reports);
 

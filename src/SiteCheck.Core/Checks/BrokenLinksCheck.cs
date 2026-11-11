@@ -87,6 +87,11 @@ public sealed class BrokenLinksCheck : ISiteCheck
                     $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}), so there was no page to check the links of.");
             }
 
+            if (PageContent.SkipUnlessPage(response, "read the page to check its links") is { } notAPage)
+            {
+                return notAPage;
+            }
+
             // After redirects, so relative links resolve against the page the visitor lands on.
             page = response.RequestMessage?.RequestUri ?? url;
             html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);

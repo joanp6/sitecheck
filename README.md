@@ -56,6 +56,12 @@ dotnet run --project src/SiteCheck.Cli -- audit --sites sites.json
 }
 ```
 
+Up to four sites are audited at the same time, and the reports still come out in the order the
+sites were given. Two addresses on the same host are never audited together, and the checks of one
+site always run one after another, so `load-time` is not measured against a server sitecheck is
+itself keeping busy. `--concurrency 8` audits more at once; `--concurrency 1` goes back to one
+site at a time.
+
 ### Report formats
 
 | `--format` | For |
@@ -101,6 +107,34 @@ A page that answers 403 or 429 is a SKIP in every check that reads it (`load-tim
 shield answers sitecheck while people open the page fine, so it says nothing about the business.
 The result carries `statusCode` so a script can say why the page went unchecked. A 401 still fails,
 since a page behind a password is what every visitor gets.
+
+An address that serves a file rather than a web page (a PDF, an image) is a SKIP in the checks
+that read HTML: there is no page to find a defect in. A page larger than 5 MB is not read.
+
+The page is downloaded once per site and every check that reads it gets that same copy, so an
+audit does not hit a site with a dozen requests for one page. `load-time` still makes its own
+request, since it measures a first visit.
+
+### Second looks
+
+A check that comes back FAIL or ERROR is run once more, two seconds later, and the second answer
+is the one reported. Once three of a site's checks have failed twice the rest are believed the first
+time, so a site that is really down is not asked everything twice. A connection dropped at the wrong moment would otherwise be a broken site
+today and a fixed one tomorrow, and `watch` would announce both. `durationMs` covers both tries
+and the wait. `--no-retry` turns it off, which is quicker against a site you know is down.
+
+### Private addresses
+
+sitecheck only connects to addresses on the public internet. A site at `localhost`, on
+`192.168.x.x` or `10.x.x.x`, or a page that redirects or links to one, is refused, and the report
+says so. Otherwise a page could send sitecheck to look at what is behind your firewall (your
+router, a database's admin page, a cloud machine's credentials at `169.254.169.254`) and read the
+answer from the report. To audit a site of your own that is not on the internet yet, pass
+`--allow-private`:
+
+```bash
+dotnet run --project src/SiteCheck.Cli -- audit http://localhost:5173 --allow-private
+```
 
 ### Exit codes
 

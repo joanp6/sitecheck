@@ -40,6 +40,11 @@ internal static class PageReader
                     with { StatusCode = (int)response.StatusCode });
             }
 
+            if (PageContent.SkipUnlessPage(response, @unchecked) is { } notAPage)
+            {
+                return (null, notAPage);
+            }
+
             var html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
             return (new FetchedPage(response.RequestMessage?.RequestUri ?? url, response.Headers, html), null);
