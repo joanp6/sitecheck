@@ -175,9 +175,8 @@ public sealed class PageSnapshotHandler : DelegatingHandler
         }
     }
 
-    // An HttpRequestException because that is what every check already reports as "the page could
-    // not be read", with this message after it.
-    private HttpRequestException TooLarge() =>
+    // A refusal of our own, not a fault of the site: see RefusedException.
+    private PageTooLargeException TooLarge() =>
         new($"The page is larger than {_maxPageBytes / (1024d * 1024d):0.#} MB, which is more than sitecheck reads.");
 
     private sealed class Slot

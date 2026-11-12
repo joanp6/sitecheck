@@ -1,4 +1,5 @@
 using System.Globalization;
+using SiteCheck.Http;
 
 namespace SiteCheck.Checks;
 
@@ -87,6 +88,11 @@ public sealed class LoadTimeCheck : ISiteCheck
             // indistinguishable from the site being down, so it is the site's failure, unless the
             // headers already said the site turns robots away: then nobody timed a visitor's page.
             return BlockedRobot(statusCode) ?? CheckOutcome.Fail($"The site did not respond within {Seconds(_httpClient.Timeout)}.") with { StatusCode = statusCode };
+        }
+        catch (HttpRequestException ex) when (Refusal.In(ex) is { } refusal)
+        {
+            // sitecheck declined to read it. That is not a finding about the site.
+            return CheckOutcome.Error(refusal.Message);
         }
         catch (HttpRequestException ex)
         {

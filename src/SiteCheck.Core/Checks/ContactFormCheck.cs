@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
+using SiteCheck.Http;
 
 namespace SiteCheck.Checks;
 
@@ -72,6 +73,11 @@ public sealed partial class ContactFormCheck : ISiteCheck
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return CheckOutcome.Fail($"The site did not respond within {_httpClient.Timeout.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s.");
+        }
+        catch (HttpRequestException ex) when (Refusal.In(ex) is { } refusal)
+        {
+            // sitecheck declined to read it. That is not a finding about the site.
+            return CheckOutcome.Error(refusal.Message);
         }
         catch (HttpRequestException ex)
         {

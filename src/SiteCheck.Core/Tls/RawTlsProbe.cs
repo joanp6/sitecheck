@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using SiteCheck.Http;
 
@@ -23,27 +22,36 @@ public interface ITlsProbe
 /// Sends one hand-written ClientHello and reads the start of the reply. See <see cref="TlsHello"/>
 /// for why this does not go through the operating system's TLS.
 /// </summary>
-[ExcludeFromCodeCoverage(Justification =
-    "The I/O adapter behind ITlsProbe, like SslStreamCertificateProvider: no decisions here, only a " +
-    "socket. What it sends and how the reply is read live in TlsHello, which is unit-tested, and the " +
-    "whole exchange is tested over real sockets by SiteCheck.Core.IntegrationTests.")]
 public sealed class RawTlsProbe : ITlsProbe
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(8);
+    /// <summary>Long enough for a slow host, short enough that a silent one cannot stall a report.</summary>
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(8);
+
+    private readonly TimeSpan _timeout;
 
     private readonly bool _allowPrivateAddresses;
 
     /// <param name="allowPrivateAddresses">
     /// Also connect to this machine and private networks. Off by default; see <see cref="PublicNetworkGuard"/>.
     /// </param>
-    public RawTlsProbe(bool allowPrivateAddresses = false) => _allowPrivateAddresses = allowPrivateAddresses;
+    /// <param name="timeout">How long a host gets to answer the hello.</param>
+    public RawTlsProbe(bool allowPrivateAddresses = false, TimeSpan? timeout = null)
+    {
+        _allowPrivateAddresses = allowPrivateAddresses;
+        _timeout = timeout ?? DefaultTimeout;
+
+        if (_timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout), _timeout, "The timeout must be positive.");
+        }
+    }
 
     public async Task<bool> AcceptsAsync(Uri url, LegacyTlsVersion version, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(Timeout);
+        deadline.CancelAfter(_timeout);
 
         try
         {
@@ -76,7 +84,7 @@ public sealed class RawTlsProbe : ITlsProbe
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException($"{url.Host} did not answer the TLS hello within {Timeout.TotalSeconds:0.##} s.");
+            throw new TimeoutException($"{url.Host} did not answer the TLS hello within {_timeout.TotalSeconds:0.##} s.");
         }
     }
 }

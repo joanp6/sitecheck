@@ -146,7 +146,7 @@ public sealed class PageSnapshotHandlerTests
         var site = StubHttpMessageHandler.Serving(new string('x', 2000));
         using var client = ClientSharingThePage(site, maxPageBytes: 1024);
 
-        var refused = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetStringAsync(Page, Token));
+        var refused = await Assert.ThrowsAsync<PageTooLargeException>(() => client.GetStringAsync(Page, Token));
 
         Assert.Contains("larger than", refused.Message, StringComparison.Ordinal);
     }
@@ -162,7 +162,7 @@ public sealed class PageSnapshotHandlerTests
         });
         using var client = ClientSharingThePage(site, maxPageBytes: 1024);
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetStringAsync(Page, Token));
+        await Assert.ThrowsAsync<PageTooLargeException>(() => client.GetStringAsync(Page, Token));
     }
 
     [Fact]

@@ -10,7 +10,7 @@ namespace SiteCheck.Http;
 /// An <see cref="HttpRequestException"/> so that checks which already report "the page could not
 /// be read" report this the same way, with the message saying why.
 /// </remarks>
-public sealed class PrivateAddressException(string message) : HttpRequestException(message);
+public sealed class PrivateAddressException(string message) : RefusedException(message);
 
 /// <summary>
 /// Opens connections only to addresses on the public internet.
