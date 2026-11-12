@@ -127,6 +127,10 @@ internal sealed class SiteChecks : IDisposable
     /// <summary>The checks this run includes, in the order they run.</summary>
     public IReadOnlyList<string> CheckNames => _runner.CheckNames;
 
+    /// <summary><paramref name="site"/> and up to <paramref name="maxPages"/> − 1 more of its pages. See <see cref="PageDiscovery"/>.</summary>
+    public Task<IReadOnlyList<Site>> ExpandAsync(Site site, int maxPages, CancellationToken cancellationToken) =>
+        new PageDiscovery(_httpClient).ExpandAsync(site, maxPages, cancellationToken);
+
     /// <summary>Runs every check against <paramref name="site"/>, downloading its page once for all of them.</summary>
     public async Task<SiteReport> AuditAsync(Site site, CancellationToken cancellationToken)
     {

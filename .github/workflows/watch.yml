@@ -34,12 +34,12 @@ jobs:
         if: env.SITES == ''
         run: echo "::notice::No SITECHECK_SITES secret, so there is nothing to watch. See docs/watch.md."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: env.SITES != ''
 
       - name: Install the SDK pinned in global.json
         if: env.SITES != ''
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
 
@@ -49,7 +49,7 @@ jobs:
       # are evicted, which a daily run never lets happen.
       - name: Restore yesterday's history
         if: env.SITES != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .sitecheck/state.json
           key: sitecheck-state-${{ github.run_id }}
@@ -74,7 +74,7 @@ jobs:
       # that found a problem is exactly the one whose history the next run must compare against.
       - name: Save today's history
         if: always() && env.SITES != '' && hashFiles('.sitecheck/state.json') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .sitecheck/state.json
           key: sitecheck-state-${{ github.run_id }}

@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text;
 using SiteCheck.Cli;
+using SiteCheck.Hosting;
 using SiteCheck.Reporting;
 using SiteCheck.Running;
 using SiteCheck.Sites;
@@ -99,6 +100,21 @@ var profileOption = new Option<string?>("--profile")
         + ". Combines with --only (adds to it) and --skip (trims it).",
 };
 
+var crawlOption = new Option<int>("--crawl")
+{
+    Description = "Audit up to this many pages of each site, not only the address given. The pages come from the site's sitemap, "
+        + "or from the links on the given page when it has none; links are not followed further. "
+        + "Checks about the server (certificate, domain, headers) still run once.",
+    DefaultValueFactory = _ => 1,
+};
+crawlOption.Validators.Add(result =>
+{
+    if (result.GetValueOrDefault<int>() is < 1 or > 50)
+    {
+        result.AddError("--crawl must be between 1 and 50.");
+    }
+});
+
 var audit = new Command("audit", "Audit one or more sites once and report what was found.")
 {
     urlsArgument,
@@ -113,6 +129,7 @@ var audit = new Command("audit", "Audit one or more sites once and report what w
     onlyOption,
     skipOption,
     profileOption,
+    crawlOption,
 };
 
 audit.SetAction(async (parse, cancellationToken) =>
@@ -124,34 +141,19 @@ audit.SetAction(async (parse, cancellationToken) =>
         return ExitCodes.Usage;
     }
 
-    using var checks = CreateChecks(parse, sites, parse.GetValue(pageSpeedOption));
+    using var checks = CreateChecks(parse, sites, selection => new SiteCheckOptions(
+        selection,
+        PageSpeed: parse.GetValue(pageSpeedOption),
+        ExposedFiles: parse.GetValue(exposedFilesOption),
+        AllowPrivate: parse.GetValue(allowPrivateOption),
+        Retry: !parse.GetValue(noRetryOption)));
 
     if (checks is null)
     {
         return ExitCodes.Usage;
     }
 
-    try
-    {
-        var reports = await SiteBatch.AuditAsync(sites, WithProgress(checks.AuditAsync, sites.Count), parse.GetValue(concurrencyOption), cancellationToken);
-
-        var report = parse.GetValue(formatOption) switch
-        {
-            "json" => JsonReport.Render(reports),
-            "html" => HtmlReport.Render(reports, TimeProvider.System.GetUtcNow()),
-            "markdown" => MarkdownReport.Render(reports),
-            "junit" => JUnitReport.Render(reports),
-            _ => ConsoleReport.Render(reports),
-        };
-        await WriteAsync(report, parse.GetValue(outputOption), cancellationToken);
-
-        return ConsoleReport.ExitCodeFor(reports);
-    }
-    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-    {
-        Console.Error.WriteLine("Cancelled.");
-        return ExitCodes.Cancelled;
-    }
+    return await AuditAndReportAsync(parse, sites, checks, parse.GetValue(crawlOption), cancellationToken);
 });
 
 var watchSitesOption = new Option<FileInfo>("--sites")
@@ -208,7 +210,11 @@ watch.SetAction(async (parse, cancellationToken) =>
         return ExitCodes.Usage;
     }
 
-    using var checks = CreateChecks(parse, sites, pageSpeed: false);
+    using var checks = CreateChecks(parse, sites, selection => new SiteCheckOptions(
+        selection,
+        ExposedFiles: parse.GetValue(exposedFilesOption),
+        AllowPrivate: parse.GetValue(allowPrivateOption),
+        Retry: !parse.GetValue(noRetryOption)));
 
     if (checks is null)
     {
@@ -259,7 +265,58 @@ watch.SetAction(async (parse, cancellationToken) =>
     }
 });
 
-var root = new RootCommand("sitecheck audits and monitors small-business websites.") { audit, watch };
+var folderArgument = new Argument<DirectoryInfo>("folder")
+{
+    Description = "The folder a build wrote the site to, such as dist or public. Its index.html is the home page.",
+};
+
+var project = new Command(
+    "project",
+    "Audit a site that is not published yet, from the folder it was built into. "
+    + "The folder is served on this machine for the length of the run and audited like any other site. "
+    + "Checks about a live server (certificate, domain, mail, headers, speed) are left out.")
+{
+    folderArgument,
+    formatOption,
+    outputOption,
+    onlyOption,
+    skipOption,
+    profileOption,
+    crawlOption,
+};
+
+project.SetAction(async (parse, cancellationToken) =>
+{
+    StaticFolderServer server;
+
+    try
+    {
+        server = StaticFolderServer.Start(parse.GetRequiredValue(folderArgument).FullName);
+    }
+    catch (Exception ex) when (ex is DirectoryNotFoundException or System.Net.HttpListenerException)
+    {
+        Console.Error.WriteLine($"The folder could not be served: {ex.Message}");
+        return ExitCodes.Usage;
+    }
+
+    await using (server)
+    {
+        Site[] sites = [new Site(server.Address, parse.GetRequiredValue(folderArgument).Name) { Skip = LocalFolder.NotApplicable }];
+
+        // The folder is on this machine, which the network guard would refuse; and a file that is
+        // missing from a folder is missing the second time too, so there is nothing to retry.
+        using var checks = CreateChecks(parse, sites, selection => new SiteCheckOptions(selection, AllowPrivate: true, Retry: false));
+
+        if (checks is null)
+        {
+            return ExitCodes.Usage;
+        }
+
+        return await AuditAndReportAsync(parse, sites, checks, parse.GetValue(crawlOption), cancellationToken);
+    }
+});
+
+var root = new RootCommand("sitecheck audits and monitors small-business websites.") { audit, watch, project };
 var parsed = root.Parse(args);
 
 if (parsed.Errors.Count > 0)
@@ -279,7 +336,7 @@ return await parsed.InvokeAsync();
 
 // The checks for a run, or null, with the reason already printed, when what was asked for cannot
 // be done: a check name that does not exist, or a selection that leaves nothing to run.
-SiteChecks? CreateChecks(ParseResult parse, IReadOnlyList<Site> sites, bool pageSpeed)
+SiteChecks? CreateChecks(ParseResult parse, IReadOnlyList<Site> sites, Func<CheckSelection, SiteCheckOptions> options)
 {
     CheckSelection selection;
 
@@ -293,12 +350,7 @@ SiteChecks? CreateChecks(ParseResult parse, IReadOnlyList<Site> sites, bool page
         return null;
     }
 
-    var checks = new SiteChecks(new SiteCheckOptions(
-        selection,
-        PageSpeed: pageSpeed,
-        ExposedFiles: parse.GetValue(exposedFilesOption),
-        AllowPrivate: parse.GetValue(allowPrivateOption),
-        Retry: !parse.GetValue(noRetryOption)));
+    var checks = new SiteChecks(options(selection));
 
     // A typo must not quietly select nothing, or quietly skip nothing.
     var known = checks.AllCheckNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -320,6 +372,49 @@ SiteChecks? CreateChecks(ParseResult parse, IReadOnlyList<Site> sites, bool page
     Console.Error.WriteLine(problem);
     checks.Dispose();
     return null;
+}
+
+// The part every one-off audit shares: find the pages, run the checks, write the report.
+async Task<int> AuditAndReportAsync(ParseResult parse, IReadOnlyList<Site> given, SiteChecks checks, int pagesPerSite, CancellationToken cancellationToken)
+{
+    try
+    {
+        var sites = given;
+
+        if (pagesPerSite > 1)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var expanded = new List<Site>();
+
+            foreach (var site in given)
+            {
+                // A page reached from two sites listed side by side is still audited once.
+                expanded.AddRange((await checks.ExpandAsync(site, pagesPerSite, cancellationToken)).Where(page => seen.Add(page.Url.AbsoluteUri)));
+            }
+
+            sites = expanded;
+        }
+
+        var concurrency = parse.CommandResult.Command.Options.Contains(concurrencyOption) ? parse.GetValue(concurrencyOption) : 1;
+        var reports = await SiteBatch.AuditAsync(sites, WithProgress(checks.AuditAsync, sites.Count), concurrency, cancellationToken);
+
+        var report = parse.GetValue(formatOption) switch
+        {
+            "json" => JsonReport.Render(reports),
+            "html" => HtmlReport.Render(reports, TimeProvider.System.GetUtcNow()),
+            "markdown" => MarkdownReport.Render(reports),
+            "junit" => JUnitReport.Render(reports),
+            _ => ConsoleReport.Render(reports),
+        };
+        await WriteAsync(report, parse.GetValue(outputOption), cancellationToken);
+
+        return ConsoleReport.ExitCodeFor(reports);
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+        Console.Error.WriteLine("Cancelled.");
+        return ExitCodes.Cancelled;
+    }
 }
 
 // Says on the terminal when each site is done. A long list is otherwise minutes of silence, and

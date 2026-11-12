@@ -85,6 +85,17 @@ public sealed class CheckNameTests : IDisposable
     }
 
     [Fact]
+    public void TheListsOfChecksLeftOutByDesignNameOnlyRealChecks()
+    {
+        // Same hazard as the profiles: names typed by hand, where a rename would leave a check
+        // quietly running where it was meant to be left out.
+        var real = _allChecks.Select(check => check.Name).ToHashSet(StringComparer.Ordinal);
+
+        Assert.DoesNotContain(SiteCheck.Sites.PageDiscovery.OncePerHost, name => !real.Contains(name));
+        Assert.DoesNotContain(SiteCheck.Hosting.LocalFolder.NotApplicable, name => !real.Contains(name));
+    }
+
+    [Fact]
     public void CheckNamesAreUnique()
     {
         // The bug this is here for: copying a check to write the next one and leaving the

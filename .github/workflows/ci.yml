@@ -6,6 +6,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Building and testing only reads the repository. Said here so that the token a job gets cannot
+# write to it, whatever the repository's default happens to be.
+permissions:
+  contents: read
+
+# Actions are pinned to a commit, with the version it is in a comment beside it. A tag such as
+# @v4 can be moved by whoever controls the action's repository, and a moved tag would run new
+# code here with this workflow's access; a commit cannot be changed. Dependabot keeps the pins
+# current (.github/dependabot.yml).
+
 jobs:
   unit-tests:
     name: Unit tests (${{ matrix.os }})
@@ -18,15 +28,15 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install the SDK pinned in global.json
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.nuget/packages
           # Central package management means Directory.Packages.props holds every version,
@@ -43,7 +53,7 @@ jobs:
         run: ./scripts/coverage.ps1
 
       - name: Publish coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: coverage-${{ matrix.os }}
@@ -65,15 +75,15 @@ jobs:
       SITECHECK_INTEGRATION: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install the SDK pinned in global.json
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}

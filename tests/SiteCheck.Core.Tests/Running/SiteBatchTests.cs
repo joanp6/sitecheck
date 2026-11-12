@@ -116,6 +116,26 @@ public sealed class SiteBatchTests
     }
 
     [Fact]
+    public async Task AuditAsync_TreatsTheWwwSpellingAsTheSameServer()
+    {
+        // A page list read from a sitemap may say www where the audit was given the bare name.
+        var sites = Sites("https://shop.test/", "https://www.shop.test/menu");
+        var audits = new HeldAudits();
+
+        var running = SiteBatch.AuditAsync(sites, audits.AuditAsync, concurrency: 2, Token);
+        await audits.WaitForStartsAsync(1);
+
+        await Task.Delay(100, Token);
+        Assert.Single(audits.Started);
+
+        audits.Finish("https://shop.test/");
+        await audits.WaitForStartsAsync(1);
+        audits.Finish("https://www.shop.test/menu");
+
+        Assert.Equal(2, (await running).Count);
+    }
+
+    [Fact]
     public async Task AuditAsync_WithAConcurrencyOfOne_AuditsInTheOrderGiven()
     {
         var sites = Sites("https://a.test/", "https://b.test/", "https://c.test/");

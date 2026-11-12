@@ -93,6 +93,36 @@ accepted, like a shop that takes bookings by phone on purpose:
 
 A skipped check is not run and does not appear in that site's report.
 
+### More than the home page
+
+```bash
+dotnet run --project src/SiteCheck.Cli -- audit perruqueria-angela.pages.dev --crawl 10
+```
+
+`--crawl 10` audits up to ten pages of each site instead of only the address given. The pages come
+from the site's sitemap (`/sitemap.xml`, or wherever `robots.txt` points), nearest the top first.
+A site with no sitemap gets the pages its given page links to that answer. Links are not followed
+from page to page, so the number of requests is known before the first is made, and the limit is 50.
+
+Each extra page is reported as a site of its own, named `Site › /path`. The checks whose answer
+belongs to the server rather than the page (certificate, domain, mail, TLS, headers, `www`) run
+once, on the address given. `watch` does not crawl: its history is kept per address.
+
+### Before publishing
+
+```bash
+dotnet run --project src/SiteCheck.Cli -- project ./dist --crawl 10
+```
+
+`project` audits a site from the folder it was built into, before it has an address. The folder is
+served on this machine (on `127.0.0.1`, reachable from nowhere else) for the length of the run, the
+way static hosts serve it: a folder answers with its `index.html`, `/about` with `about.html`, and
+a missing file with a 404 and the folder's `404.html`. Nothing outside the folder is served.
+
+Checks about a live server are left out, because there is none yet: certificate, domain, mail,
+TLS, `www`, headers, cookies and speed. `mixed-content` skips too, since the local copy is served
+over plain http. It exits like `audit`, so a build can refuse to deploy a site with a broken link.
+
 ### Choosing checks
 
 | Option | Runs |
@@ -251,6 +281,18 @@ better, so a site that stays broken is reported once rather than every morning. 
 something got worse. [`.github/workflows/watch.yml`](.github/workflows/watch.yml) runs it daily on
 GitHub Actions, emails you through GitHub when something breaks, and can message you on Telegram.
 [docs/watch.md](docs/watch.md) explains the rules and the ten-minute setup.
+
+## Dependencies
+
+sitecheck has one runtime dependency, `System.CommandLine`. Three things keep it and the build honest:
+
+- Every restore asks NuGet whether a package in use, or one it pulls in, has a known vulnerability
+  (`NuGetAudit` in [`Directory.Build.props`](Directory.Build.props)). Warnings are errors here, so
+  a vulnerable package stops the build.
+- The GitHub Actions the workflows use are pinned to a commit, not a tag: a tag can be moved to
+  different code, a commit cannot.
+- [Dependabot](.github/dependabot.yml) opens a pull request each week for packages and actions
+  with a newer version, which is also what moves those pins forward.
 
 ## Testing
 

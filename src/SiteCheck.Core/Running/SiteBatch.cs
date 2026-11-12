@@ -47,10 +47,10 @@ public static class SiteBatch
 
         var reports = new SiteReport[sites.Count];
 
-        // IdnHost, so that the same host written with and without its accents is one group.
+        // One group per server, however its name is written.
         var hosts = sites
             .Select((site, index) => (Site: site, Index: index))
-            .GroupBy(entry => entry.Site.Url.IdnHost, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(entry => HostKey(entry.Site.Url), StringComparer.OrdinalIgnoreCase);
 
         await Parallel.ForEachAsync(
             hosts,
@@ -66,4 +66,11 @@ public static class SiteBatch
 
         return reports;
     }
+
+    /// <summary>
+    /// What makes two addresses the same server: the host, with or without <c>www.</c>, since
+    /// both lead to one machine and a page list read from a sitemap may use either.
+    /// </summary>
+    private static string HostKey(Uri address) =>
+        address.IdnHost.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? address.IdnHost[4..] : address.IdnHost;
 }

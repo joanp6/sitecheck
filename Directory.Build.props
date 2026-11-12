@@ -8,6 +8,16 @@
     <!-- A warning we are willing to ship is a warning we will stop reading. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!--
+      Every restore asks NuGet whether a package in use has a known vulnerability. "all" looks at
+      the packages our packages pull in too, which is where most of them hide, and "low" reports
+      every severity. They arrive as warnings NU1901 to NU1904, so with TreatWarningsAsErrors a
+      vulnerable dependency stops the build, here and in CI, instead of waiting to be noticed.
+    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
   </PropertyGroup>
 
 </Project>

@@ -1,0 +1,26 @@
+# Opens a pull request when a dependency has a newer version, so updates arrive as something to
+# review rather than something to remember. Weekly is often enough for a tool this size; security
+# fixes do not wait for the schedule, GitHub raises those as soon as they are published.
+version: 2
+
+updates:
+  # The NuGet packages. Versions live in Directory.Packages.props (central package management),
+  # which Dependabot understands from the repository root.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # The test stack moves together; one pull request for it instead of three.
+      testing:
+        patterns:
+          - "xunit*"
+          - "Microsoft.Testing.*"
+          - "Microsoft.Extensions.TimeProvider.Testing"
+
+  # The actions the workflows use. They are pinned to a commit (see the comment in ci.yml), and
+  # this is what moves the pin forward: Dependabot rewrites both the hash and the version beside it.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
