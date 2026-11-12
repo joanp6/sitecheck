@@ -32,6 +32,9 @@ public sealed class CheckRunner
         _retry = retry ?? CheckRetry.None;
     }
 
+    /// <summary>The names of the checks this runner runs, in the order it runs them.</summary>
+    public IReadOnlyList<string> CheckNames => [.. _checks.Select(check => check.Name)];
+
     /// <summary>
     /// Runs every registered check against <paramref name="url"/>, in registration order.
     /// </summary>
@@ -39,16 +42,21 @@ public sealed class CheckRunner
     /// Execution is sequential on purpose. One of the checks measures load time, and
     /// firing the other requests at the same host concurrently would distort it.
     /// </remarks>
-    public async Task<IReadOnlyList<CheckResult>> RunAsync(Uri url, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<CheckResult>> RunAsync(Uri url, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
 
-        var results = new List<CheckResult>(_checks.Count);
+        return RunAsync(url, _checks, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<CheckResult>> RunAsync(Uri url, IReadOnlyList<ISiteCheck> checks, CancellationToken cancellationToken)
+    {
+        var results = new List<CheckResult>(checks.Count);
 
         // Per audit, not per runner: one site being down says nothing about the next.
         var confirmed = new StrongBox<int>(0);
 
-        foreach (var check in _checks)
+        foreach (var check in checks)
         {
             cancellationToken.ThrowIfCancellationRequested();
             results.Add(await RunOneAsync(check, url, confirmed, cancellationToken).ConfigureAwait(false));
@@ -65,7 +73,9 @@ public sealed class CheckRunner
         ArgumentNullException.ThrowIfNull(site);
 
         var startedAt = _timeProvider.GetUtcNow();
-        var results = await RunAsync(site.Url, cancellationToken).ConfigureAwait(false);
+        // A check the site opts out of is not run and not reported: see Site.Skip.
+        ISiteCheck[] wanted = [.. _checks.Where(check => !site.Skip.Contains(check.Name, StringComparer.OrdinalIgnoreCase))];
+        var results = await RunAsync(site.Url, wanted, cancellationToken).ConfigureAwait(false);
 
         return new SiteReport(site, startedAt, results);
     }

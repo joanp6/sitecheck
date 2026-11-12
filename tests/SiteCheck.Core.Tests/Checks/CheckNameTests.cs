@@ -72,6 +72,19 @@ public sealed class CheckNameTests : IDisposable
     }
 
     [Fact]
+    public void EveryProfileNamesOnlyRealChecks()
+    {
+        // A profile is a list of names typed by hand. Renaming a check, or a typo here, would
+        // otherwise leave a profile quietly running one check fewer than it claims.
+        var real = _allChecks.Select(check => check.Name).ToHashSet(StringComparer.Ordinal);
+
+        var strays = SiteCheck.Running.CheckSelection.Profiles
+            .SelectMany(profile => profile.Value.Where(name => !real.Contains(name)).Select(name => $"{profile.Key}: {name}"));
+
+        Assert.Empty(strays);
+    }
+
+    [Fact]
     public void CheckNamesAreUnique()
     {
         // The bug this is here for: copying a check to write the next one and leaving the

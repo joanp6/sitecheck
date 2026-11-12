@@ -105,6 +105,7 @@ public static class SiteList
 
         string? address;
         string? name = null;
+        string[] skip = [];
 
         switch (entry.ValueKind)
         {
@@ -132,6 +133,17 @@ public static class SiteList
                     return false;
                 }
 
+                if (entry.TryGetProperty("skip", out var listed))
+                {
+                    if (listed.ValueKind != JsonValueKind.Array || listed.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String))
+                    {
+                        problem = "\"skip\" must be a list of check names, such as [\"booking-link\"].";
+                        return false;
+                    }
+
+                    skip = [.. listed.EnumerateArray().Select(item => item.GetString()!.Trim()).Where(item => item.Length > 0)];
+                }
+
                 break;
 
             default:
@@ -145,7 +157,8 @@ public static class SiteList
             return false;
         }
 
-        site = new Site(parsed, name);
+        // Whether the names are real checks is not known here; the caller, who has the checks, says.
+        site = new Site(parsed, name) { Skip = new HashSet<string>(skip, StringComparer.OrdinalIgnoreCase) };
         return true;
     }
 }

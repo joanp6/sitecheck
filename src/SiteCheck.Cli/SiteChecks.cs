@@ -8,6 +8,30 @@ using SiteCheck.Tls;
 
 namespace SiteCheck.Cli;
 
+/// <summary>What the command line asked of a run.</summary>
+/// <param name="Selection">Which checks to include; see <see cref="CheckSelection"/>.</param>
+/// <param name="PageSpeed">
+/// Include <see cref="PageSpeedCheck"/>, which sends each address to Google and takes up to a
+/// minute per site, so it only runs when asked for.
+/// </param>
+/// <param name="ExposedFiles">
+/// Include <see cref="ExposedFilesCheck"/>, which asks the site for files no visitor would, so it
+/// only runs when asked for.
+/// </param>
+/// <param name="AllowPrivate">
+/// Also connect to this machine and private networks, for auditing a site of your own that is
+/// not on the internet. Off by default; see <see cref="PublicNetworkGuard"/>.
+/// </param>
+/// <param name="Retry">
+/// Run a check that fails or errors once more before believing it. On by default; see <see cref="CheckRetry"/>.
+/// </param>
+internal sealed record SiteCheckOptions(
+    CheckSelection Selection,
+    bool PageSpeed = false,
+    bool ExposedFiles = false,
+    bool AllowPrivate = false,
+    bool Retry = true);
+
 /// <summary>
 /// The one place that decides which checks a run includes and how they are wired.
 /// </summary>
@@ -21,23 +45,12 @@ internal sealed class SiteChecks : IDisposable
     private readonly PageSnapshotHandler _snapshots;
     private readonly CheckRunner _runner;
 
-    /// <param name="includePageSpeed">
-    /// Adds <see cref="PageSpeedCheck"/>, which sends each address to Google and takes up to a
-    /// minute per site, so it only runs when asked for.
-    /// </param>
-    /// <param name="includeExposedFiles">
-    /// Adds <see cref="ExposedFilesCheck"/>, which asks the site for files no visitor would, so it
-    /// only runs when asked for.
-    /// </param>
-    /// <param name="allowPrivate">
-    /// Also connect to this machine and private networks, for auditing a site of your own that is
-    /// not on the internet. Off by default; see <see cref="PublicNetworkGuard"/>.
-    /// </param>
-    /// <param name="retry">
-    /// Run a check that fails or errors once more before believing it. On by default; see <see cref="CheckRetry"/>.
-    /// </param>
-    public SiteChecks(bool includePageSpeed = false, bool includeExposedFiles = false, bool allowPrivate = false, bool retry = true)
+    public SiteChecks(SiteCheckOptions options)
     {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var allowPrivate = options.AllowPrivate;
+
         // Every check that reads the page shares one download of it. See PageSnapshotHandler.
         _snapshots = new PageSnapshotHandler(CreateHandler(allowPrivate));
         _httpClient = CreateClient(_snapshots);
@@ -83,19 +96,36 @@ internal sealed class SiteChecks : IDisposable
             new WwwAddressCheck(new UdpDnsResolver()),
         ];
 
+        // Built whether or not they run, so that naming one in --only is enough to ask for it.
+        var exposedFiles = new ExposedFilesCheck(_httpClient);
+        var pageSpeed = new PageSpeedCheck(_pageSpeedClient, Environment.GetEnvironmentVariable(PageSpeedKeyVariable));
+
+        AllCheckNames = [.. checks.Select(check => check.Name), exposedFiles.Name, pageSpeed.Name];
+
+        var selection = options.Selection;
+
+        checks.RemoveAll(check => !selection.Includes(check.Name));
+
         // Asks for files no visitor would, which a firewall may take for an attack. See ExposedFilesCheck.
-        if (includeExposedFiles)
+        if (selection.Includes(exposedFiles.Name, optIn: true, optedIn: options.ExposedFiles))
         {
-            checks.Add(new ExposedFilesCheck(_httpClient));
+            checks.Add(exposedFiles);
         }
 
-        if (includePageSpeed)
+        // Sends each address to Google and takes up to a minute per site.
+        if (selection.Includes(pageSpeed.Name, optIn: true, optedIn: options.PageSpeed))
         {
-            checks.Add(new PageSpeedCheck(_pageSpeedClient, Environment.GetEnvironmentVariable(PageSpeedKeyVariable)));
+            checks.Add(pageSpeed);
         }
 
-        _runner = new CheckRunner(checks, TimeProvider.System, retry ? CheckRetry.Once : CheckRetry.None);
+        _runner = new CheckRunner(checks, TimeProvider.System, options.Retry ? CheckRetry.Once : CheckRetry.None);
     }
+
+    /// <summary>Every check there is, opt-in ones included, whether or not this run includes it.</summary>
+    public IReadOnlyList<string> AllCheckNames { get; }
+
+    /// <summary>The checks this run includes, in the order they run.</summary>
+    public IReadOnlyList<string> CheckNames => _runner.CheckNames;
 
     /// <summary>Runs every check against <paramref name="site"/>, downloading its page once for all of them.</summary>
     public async Task<SiteReport> AuditAsync(Site site, CancellationToken cancellationToken)
@@ -138,7 +168,9 @@ internal sealed class SiteChecks : IDisposable
 
         // Many sites answer 403 to a request with no User-Agent, which would grade a healthy site as
         // broken because of us. Say who we are and where to read about it.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("sitecheck/0.1 (+https://github.com/joanp6/sitecheck)");
+        // The version comes from the build, so it cannot be left behind by a release.
+        var version = typeof(SiteChecks).Assembly.GetName().Version?.ToString(2) ?? "0.0";
+        client.DefaultRequestHeaders.UserAgent.ParseAdd($"sitecheck/{version} (+https://github.com/joanp6/sitecheck)");
 
         return client;
     }

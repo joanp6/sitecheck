@@ -72,6 +72,42 @@ public static class ConsoleReport
         return text.ToString();
     }
 
+    /// <summary>
+    /// One line saying a site is done, for whoever is watching a long run: which one, how it
+    /// went, and how many are left.
+    /// </summary>
+    /// <param name="done">How many sites have finished, this one included.</param>
+    /// <param name="total">How many sites the run audits.</param>
+    /// <param name="report">The site that just finished.</param>
+    /// <param name="took">How long its audit took.</param>
+    public static string ProgressLine(int done, int total, SiteReport report, TimeSpan took)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        int Count(CheckStatus status) => report.Results.Count(r => r.Status == status);
+
+        var problems = new List<string>(3);
+
+        if (Count(CheckStatus.Fail) > 0)
+        {
+            problems.Add(string.Create(CultureInfo.InvariantCulture, $"{Count(CheckStatus.Fail)} failed"));
+        }
+
+        if (Count(CheckStatus.Warn) > 0)
+        {
+            problems.Add(string.Create(CultureInfo.InvariantCulture, $"{Count(CheckStatus.Warn)} warned"));
+        }
+
+        if (Count(CheckStatus.Error) > 0)
+        {
+            problems.Add(string.Create(CultureInfo.InvariantCulture, $"{Count(CheckStatus.Error)} errored"));
+        }
+
+        var outcome = problems.Count == 0 ? "all fine" : string.Join(", ", problems);
+
+        return string.Create(CultureInfo.InvariantCulture, $"[{done}/{total}] {report.Site.DisplayName}: {outcome} ({took.TotalSeconds:0.0} s)");
+    }
+
     public static string Label(CheckStatus status) => status switch
     {
         CheckStatus.Pass => "PASS",
@@ -97,7 +133,7 @@ public static class ConsoleReport
         }
 
         text.AppendLine();
-        text.AppendLine(ChecksSummary(report.Results));
+        text.AppendLine(ChecksSummary(report.Results) + (report.Grade is { } grade ? $" Grade {grade}." : string.Empty));
     }
 
     private static string ChecksSummary(IReadOnlyList<CheckResult> results)

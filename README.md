@@ -6,6 +6,24 @@ CLI that audits and monitors small-business websites: SSL, domain renewal, speed
 links and contact forms. It reports in words a site's owner can act on, and it can watch a list of
 sites every day and say only what changed.
 
+## Install
+
+sitecheck is a [.NET tool](https://learn.microsoft.com/dotnet/core/tools/global-tools). With the
+[.NET 10 SDK](https://dotnet.microsoft.com/download) installed, build the package once and install
+it from the folder it lands in:
+
+```bash
+dotnet pack src/SiteCheck.Cli -c Release
+```
+
+```bash
+dotnet tool install --global sitecheck --add-source ./artifacts
+```
+
+From then on `sitecheck` is a command anywhere: `sitecheck audit example.com`. The examples below
+use `dotnet run --project src/SiteCheck.Cli --` instead, which runs it from a checkout without
+installing anything; the two are interchangeable.
+
 ## Usage
 
 ```bash
@@ -62,11 +80,53 @@ site always run one after another, so `load-time` is not measured against a serv
 itself keeping busy. `--concurrency 8` audits more at once; `--concurrency 1` goes back to one
 site at a time.
 
+With more than one site, a line is printed to the terminal as each one finishes
+(`[3/12] Perruqueria Àngela: 1 failed, 2 warned (6.1 s)`), so a long list does not look like a
+hang. It goes to stderr and only when a person is watching: piped or in CI, it is not written.
+
+An entry can also say which checks do not apply to that site, for the finding that is known and
+accepted, like a shop that takes bookings by phone on purpose:
+
+```json
+{ "name": "Perruqueria Àngela", "url": "perruqueria-angela.pages.dev", "skip": ["booking-link"] }
+```
+
+A skipped check is not run and does not appear in that site's report.
+
+### Choosing checks
+
+| Option | Runs |
+|---|---|
+| `--only ssl-certificate,tls-config` | These and no others. Naming an opt-in check (`pagespeed`, `exposed-files`) here is enough to include it |
+| `--skip booking-link,copyright-year` | Everything else |
+| `--profile security` | A named set: `security` (could someone abuse the site or its name?), `seo` (will people find it, and does it open quickly?) or `business` (can a customer do what they came for?) |
+
+They combine: `--profile` and `--only` add up, and `--skip` trims the result. A name that is not a
+check is an error, not an empty run. A profile does not switch on an opt-in check by listing it.
+
+### Grade
+
+Each site gets a letter, for comparing sites at a glance or one site across months:
+
+| | |
+|---|---|
+| A | Nothing to fix and nothing to look at |
+| B | No defects, up to 3 warnings |
+| C | No defects, 4 or more warnings |
+| D | 1 defect |
+| F | 2 or more defects |
+
+It is a rule you can recite, not a score with weights. Errors and skips count neither way, but when
+fewer than half the checks reached a verdict (a site behind a robot shield, say) no grade is given.
+The exit code and `watch` do not use it.
+
 ### Report formats
 
 | `--format` | For |
 |---|---|
 | `text` (default) | The terminal |
+| `markdown` | Pasting into an issue, a pull request or a chat. Problems only, worst first; what passed is counted, not listed |
+| `junit` | CI servers. Jenkins, GitLab and Azure DevOps show it as test results with history: a site is a suite, a check is a test. FAIL is a failure, ERROR an error, SKIP skipped; WARN passes with the warning in its output, so a build does not go red for something that is fine today |
 | `json` | Scripts. The fields are a contract, documented in [`JsonReport`](src/SiteCheck.Core/Reporting/JsonReport.cs) |
 | `html` | The site's owner: one self-contained page, problems first, in plain words. Attach it to an email |
 
@@ -77,6 +137,7 @@ their own fields instead:
 
 | Field | On | Meaning |
 |---|---|---|
+| `grade` | every site | `A`, `B`, `C`, `D` or `F`; see [Grade](#grade). Omitted when too little could be checked to give one |
 | `status` | every result | `pass`, `warn`, `fail`, `error` or `skip` |
 | `durationMs` | every result | How long the check ran |
 | `validUntil` | `ssl-certificate`, `domain-expiry` | When the certificate or domain expires. Omitted when unknown |
