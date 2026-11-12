@@ -31,7 +31,8 @@ public static class SiteUrl
 
         if (!Uri.TryCreate(text, UriKind.Absolute, out var parsed)
             || (parsed.Scheme != Uri.UriSchemeHttps && parsed.Scheme != Uri.UriSchemeHttp)
-            || string.IsNullOrEmpty(parsed.Host))
+            || string.IsNullOrEmpty(parsed.Host)
+            || !HasHostNameLabels(parsed.Host))
         {
             return false;
         }
@@ -39,4 +40,16 @@ public static class SiteUrl
         url = parsed;
         return true;
     }
+
+    /// <summary>
+    /// Whether no part of <paramref name="host"/> begins or ends with a hyphen, which no host
+    /// name may (RFC 952, RFC 1123).
+    /// </summary>
+    /// <remarks>
+    /// .NET's own parser lets it through, and that is how a mistyped option became a site:
+    /// <c>--no-rety</c> read as the host <c>--no-rety</c>, was audited, failed every check, and
+    /// turned the run red with nothing to say why. Refusing it here makes a typo an error.
+    /// </remarks>
+    private static bool HasHostNameLabels(string host) =>
+        host.Split('.').All(label => !label.StartsWith('-') && !label.EndsWith('-'));
 }

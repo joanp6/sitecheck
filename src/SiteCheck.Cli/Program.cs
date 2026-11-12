@@ -450,7 +450,11 @@ static async Task<IReadOnlyList<Site>?> CollectSitesAsync(string[] addresses, Fi
     {
         if (!SiteUrl.TryParse(address, out var url))
         {
-            Console.Error.WriteLine($"\"{address}\" is not a website address.");
+            // Anything that is not an option the command knows arrives here as an address, so a
+            // mistyped option is told what it is rather than called a bad address.
+            Console.Error.WriteLine(address.StartsWith('-')
+                ? $"\"{address}\" is not an option of this command. Run 'sitecheck audit --help' for the ones there are."
+                : $"\"{address}\" is not a website address.");
             return null;
         }
 
