@@ -2,9 +2,29 @@
 
 [![build](https://github.com/joanp6/sitecheck/actions/workflows/ci.yml/badge.svg)](https://github.com/joanp6/sitecheck/actions/workflows/ci.yml)
 
-CLI that audits and monitors small-business websites: SSL, domain renewal, speed, mobile, broken
-links and contact forms. It reports in words a site's owner can act on, and it can watch a list of
-sites every day and say only what changed.
+A command-line tool that audits and monitors small-business websites, and reports in words a
+site's owner can act on.
+
+It answers four questions about a site, with 24 checks that run by default and two more on request:
+
+| | Checks |
+|---|---|
+| **Does it work?** | `ssl-certificate`, `https-redirect`, `domain-expiry`, `load-time`, `mobile-viewport`, `broken-links`, `contact-form`, `mixed-content`, `page-weight`, `www-address` |
+| **Can a customer do what they came for?** | `click-to-call`, `booking-link`, `legal-pages`, `copyright-year` |
+| **Will people find it?** | `search-snippet`, `local-business`, `share-preview`, and `pagespeed` on request |
+| **Could someone abuse it?** | `email-auth`, `security-headers`, `cookies`, `info-leak`, `sri`, `cms-version`, `tls-config`, and `exposed-files` on request |
+
+And it does that in three ways:
+
+| Command | What it is for |
+|---|---|
+| `sitecheck audit <address>` | Audit one or more sites once. [Usage](#usage) |
+| `sitecheck watch` | Audit a list of sites every day and say only what changed since yesterday. [Watching sites every day](#watching-sites-every-day) |
+| `sitecheck project <folder>` | Audit a site from the folder it was built into, before it is published. [Before publishing](#before-publishing) |
+
+It only reads what a site already hands out to any visitor. It never logs in, submits a form or
+tries a password. [`docs/architecture.md`](docs/architecture.md) explains how it is built and why,
+and [`CHANGELOG.md`](CHANGELOG.md) what changed in each version.
 
 ## Install
 
@@ -33,25 +53,32 @@ dotnet run --project src/SiteCheck.Cli -- audit perruqueria-angela.pages.dev
 ```text
 sitecheck report for https://perruqueria-angela.pages.dev/
 
-  PASS   ssl-certificate  The certificate is valid until 2026-11-01 UTC, 32 day(s) from now.
-  PASS   https-redirect   Visitors who open http://perruqueria-angela.pages.dev are sent on to the secure site.
-  SKIP   domain-expiry    The site lives at an address on pages.dev, which belongs to the hosting platform, so there is no domain of its own to renew.
-  SKIP   email-auth       The site lives at an address on pages.dev, which belongs to the hosting platform, so its mail settings are not the business's.
-  PASS   load-time        The page loaded in 0.1 s.
-  PASS   mobile-viewport  The page declares a mobile viewport that follows the device width.
-  PASS   broken-links     All 11 link(s) on the page work.
-  SKIP   contact-form     The page has no form that sends anything, so there is nothing to check.
-  PASS   mixed-content    Everything the page's HTML loads comes over https.
-  PASS   click-to-call    Visitors on a phone can call with one tap and open a WhatsApp chat.
-  PASS   search-snippet   The page gives Google its own title, "Hair salon in Mataró", and a description to show in results.
-  PASS   local-business   The page tells Google it is a HairSalon, with its address and opening hours.
-  PASS   legal-pages      The page links to a legal notice and a privacy policy. It loads nothing known to set cookies, so no cookie policy was looked for. sitecheck only sees the links, not what the pages say.
-  PASS   page-weight      A first visit downloads 640 kB: the page and 14 of the images, scripts and stylesheets it names. That is light enough for a phone.
-  PASS   share-preview    Shared on WhatsApp or Facebook, a link to the page shows its own title and picture, and the page has a favicon.
-  PASS   booking-link     Visitors can book online through Booksy and find the shop on a map.
-  PASS   copyright-year   The page's copyright notice says 2026, which looks current.
+  PASS   ssl-certificate   The certificate is valid until 2026-12-30 UTC, 47 day(s) from now.
+  PASS   https-redirect    Visitors who open http://perruqueria-angela.pages.dev are sent on to the secure site.
+  SKIP   domain-expiry     The site lives at an address on pages.dev, which belongs to the hosting platform, so there is no domain of its own to renew.
+  SKIP   email-auth        The site lives at an address on pages.dev, which belongs to the hosting platform, so its mail settings are not the business's.
+  PASS   load-time         The page loaded in 0.38 s.
+  PASS   mobile-viewport   The page declares a mobile viewport that follows the device width.
+  PASS   broken-links      All 12 link(s) on the page work.
+  SKIP   contact-form      The page has no form that sends anything, so there is nothing to check.
+  PASS   mixed-content     Everything the page's HTML loads comes over https.
+  PASS   click-to-call     Visitors on a phone can call with one tap and open a WhatsApp chat.
+  PASS   search-snippet    The page gives Google its own title, "Perruqueria Angela | Peluquería y barbería en Mataró", and a description to show in results.
+  PASS   local-business    The page tells Google it is a HairSalon, with its address and opening hours.
+  PASS   legal-pages       The page links to a legal notice, a privacy policy and a cookie policy. sitecheck only sees the links, not what the pages say.
+  PASS   page-weight       A first visit downloads 1.0 MB: the page and 8 of the images, scripts and stylesheets it names. That is light enough for a phone.
+  PASS   share-preview     Shared on WhatsApp or Facebook, a link to the page shows its own title and picture, and the page has a favicon. sitecheck could not ask for the og:image, so whether it loads is not known.
+  PASS   booking-link      Visitors can book online through Treatwell and find the shop on a map.
+  PASS   copyright-year    The page's copyright notice says 2026, which looks current.
+  PASS   security-headers  The site switches on the basic browser protections, and has a content security policy and a referrer policy.
+  PASS   cookies           The page sets no cookies when it is first opened. Cookies that scripts add afterwards are not seen here.
+  PASS   info-leak         The server does not announce which version of its software it runs.
+  PASS   sri               The page loads no scripts or stylesheets from public library servers, so there is none to fingerprint.
+  SKIP   cms-version       The page does not say what it is built with, so there is no version to check. Nothing wrong with that.
+  PASS   tls-config        The server refuses the retired versions of TLS (1.0 and 1.1) and only speaks the current ones.
+  SKIP   www-address       The site lives at an address on pages.dev, which has no www spelling of its own.
 
-17 check(s): 14 passed, 0 warned, 0 failed, 0 errored, 3 skipped.
+24 check(s): 19 passed, 0 warned, 0 failed, 0 errored, 5 skipped. Grade A.
 ```
 
 An address can be a bare host (`example.com`, read as `https://example.com/`) or a full `http://` /
@@ -218,7 +245,7 @@ and the wait. `--no-retry` turns it off, which is quicker against a site you kno
 
 sitecheck only connects to addresses on the public internet. A site at `localhost`, on
 `192.168.x.x` or `10.x.x.x`, or a page that redirects or links to one, is refused, and the report
-says so. Otherwise a page could send sitecheck to look at what is behind your firewall (your
+says so: the checks that needed it come back ERROR with the reason, never as a defect of the site. Otherwise a page could send sitecheck to look at what is behind your firewall (your
 router, a database's admin page, a cloud machine's credentials at `169.254.169.254`) and read the
 answer from the report. To audit a site of your own that is not on the internet yet, pass
 `--allow-private`:
