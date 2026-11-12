@@ -41,6 +41,14 @@ public static class HtmlReport
         ["share-preview"] = "Preview when shared, and icon",
         ["booking-link"] = "Online booking and map",
         ["copyright-year"] = "Copyright year",
+        ["security-headers"] = "Browser protections",
+        ["exposed-files"] = "Leftover files on the server",
+        ["cookies"] = "Cookies",
+        ["info-leak"] = "What the server says about itself",
+        ["sri"] = "Scripts from other servers",
+        ["cms-version"] = "What the site is built with",
+        ["tls-config"] = "Encryption versions",
+        ["www-address"] = "With and without www",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 
@@ -86,6 +94,7 @@ public static class HtmlReport
             .warn { color:var(--warn); background:var(--warn-bg); }
             .pass { color:var(--pass); background:var(--pass-bg); }
             .neutral { color:var(--neutral); background:var(--neutral-bg); }
+            .grade { margin-right:6px; }
             @media (max-width:560px) { li { grid-template-columns:1fr; } .detail { grid-column:1; } }
             footer { color:var(--muted); font-size:.85rem; }
             </style>
@@ -108,6 +117,7 @@ public static class HtmlReport
             <footer>
             <p><strong>Needs fixing</strong>: visitors are affected now. <strong>Worth a look</strong>: fine today, but close to becoming a problem.
             <strong>Not applicable</strong>: the question does not apply to this site. <strong>Could not check</strong>: a problem with the checking tool, not with the site.</p>
+            <p><strong>Grade</strong>: A, nothing to fix or look at. B, up to three things worth a look. C, four or more. D, one thing needs fixing. F, two or more.</p>
             <p>Made with sitecheck.</p>
             </footer>
             </main>
@@ -122,7 +132,7 @@ public static class HtmlReport
     private static void AppendSite(StringBuilder html, SiteReport report)
     {
         html.Append("<section>\n<div class=\"site\">");
-        html.Append(CultureInfo.InvariantCulture, $"<h2>{Encode(report.Site.DisplayName)}</h2>{Pill(report.Verdict, overall: true)}</div>\n");
+        html.Append(CultureInfo.InvariantCulture, $"<h2>{Encode(report.Site.DisplayName)}</h2><span>{Grade(report)}{Pill(report.Verdict, overall: true)}</span></div>\n");
         html.Append(CultureInfo.InvariantCulture,
             $"<div class=\"url\">{Encode(report.Site.Url.ToString())} · checked {Encode(report.CheckedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture))}</div>\n<ul>\n");
 
@@ -135,6 +145,10 @@ public static class HtmlReport
 
         html.Append("</ul>\n</section>\n");
     }
+
+    // The letter comes from a fixed set, so it needs no encoding.
+    private static string Grade(SiteReport report) =>
+        report.Grade is { } grade ? $"<span class=\"pill neutral grade\">Grade {grade}</span>" : string.Empty;
 
     private static string Pill(CheckStatus status, bool overall)
     {

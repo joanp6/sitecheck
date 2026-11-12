@@ -44,7 +44,15 @@ public sealed class CheckNameTests : IDisposable
             new SharePreviewCheck(_httpClient),
             new BookingLinkCheck(_httpClient),
             new CopyrightYearCheck(_httpClient, TimeProvider.System),
+            new SecurityHeadersCheck(_httpClient),
+            new CookiesCheck(_httpClient),
+            new InfoLeakCheck(_httpClient),
+            new SubresourceIntegrityCheck(_httpClient),
+            new CmsVersionCheck(_httpClient),
+            new TlsConfigCheck(new FakeTlsProbe()),
+            new WwwAddressCheck(new FakeDnsResolver()),
             new PageSpeedCheck(_httpClient, apiKey: null),
+            new ExposedFilesCheck(_httpClient),
         ];
 
     public void Dispose() => _httpClient.Dispose();
@@ -61,6 +69,30 @@ public sealed class CheckNameTests : IDisposable
             .Order();
 
         Assert.Equal(declared, _allChecks.Select(check => check.GetType().Name).Order());
+    }
+
+    [Fact]
+    public void EveryProfileNamesOnlyRealChecks()
+    {
+        // A profile is a list of names typed by hand. Renaming a check, or a typo here, would
+        // otherwise leave a profile quietly running one check fewer than it claims.
+        var real = _allChecks.Select(check => check.Name).ToHashSet(StringComparer.Ordinal);
+
+        var strays = SiteCheck.Running.CheckSelection.Profiles
+            .SelectMany(profile => profile.Value.Where(name => !real.Contains(name)).Select(name => $"{profile.Key}: {name}"));
+
+        Assert.Empty(strays);
+    }
+
+    [Fact]
+    public void TheListsOfChecksLeftOutByDesignNameOnlyRealChecks()
+    {
+        // Same hazard as the profiles: names typed by hand, where a rename would leave a check
+        // quietly running where it was meant to be left out.
+        var real = _allChecks.Select(check => check.Name).ToHashSet(StringComparer.Ordinal);
+
+        Assert.DoesNotContain(SiteCheck.Sites.PageDiscovery.OncePerHost, name => !real.Contains(name));
+        Assert.DoesNotContain(SiteCheck.Hosting.LocalFolder.NotApplicable, name => !real.Contains(name));
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using SiteCheck.Http;
+
 namespace SiteCheck.Checks;
 
 /// <summary>
@@ -45,6 +47,11 @@ public sealed class HttpsRedirectCheck : ISiteCheck
                 ? CheckOutcome.Pass($"Visitors who open http://{url.Host} are sent on to the secure site.")
                 : CheckOutcome.Fail(
                     $"http://{url.Host} answers on the insecure address instead of sending visitors to https, so browsers mark it \"Not secure\". Ask your host to redirect http to https.");
+        }
+        catch (HttpRequestException ex) when (Refusal.In(ex) is { } refusal)
+        {
+            // sitecheck declined to read it. That is not a finding about the site.
+            return CheckOutcome.Error(refusal.Message);
         }
         catch (Exception ex) when (ex is HttpRequestException
                                    || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))

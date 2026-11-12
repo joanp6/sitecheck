@@ -3,6 +3,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using SiteCheck.Certificates;
+using SiteCheck.Http;
 
 namespace SiteCheck.Checks;
 
@@ -69,6 +70,11 @@ public sealed class SslCertificateCheck : ISiteCheck
         try
         {
             info = await _certificates.GetAsync(secure, cancellationToken).ConfigureAwait(false);
+        }
+        catch (PrivateAddressException ex)
+        {
+            // sitecheck declined to look. That is not a finding about the site.
+            return CheckOutcome.Error(ex.Message);
         }
         catch (SocketException)
         {

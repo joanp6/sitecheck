@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
+using SiteCheck.Http;
 
 namespace SiteCheck.Checks;
 
@@ -61,12 +62,22 @@ public sealed partial class ContactFormCheck : ISiteCheck
                     $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}), so there was no page to look for forms on.");
             }
 
+            if (PageContent.SkipUnlessPage(response, "read the page to look for forms") is { } notAPage)
+            {
+                return notAPage;
+            }
+
             page = response.RequestMessage?.RequestUri ?? url;
             html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return CheckOutcome.Fail($"The site did not respond within {_httpClient.Timeout.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s.");
+        }
+        catch (HttpRequestException ex) when (Refusal.In(ex) is { } refusal)
+        {
+            // sitecheck declined to read it. That is not a finding about the site.
+            return CheckOutcome.Error(refusal.Message);
         }
         catch (HttpRequestException ex)
         {

@@ -83,3 +83,14 @@ secrets is also an error, for the same reason.
   repository. It emails a warning first; re-enable it from the Actions tab.
 - **Every check runs from GitHub's servers in the US.** A site that blocks traffic from outside
   Spain will look down.
+- **A new version of sitecheck can bring new checks, and the first run with them reports what
+  they find as "first seen".** That is one busy morning, not a wave of new problems: the sites
+  did not change, more of them is being looked at. The run after it is quiet again.
+- **To stop being told about something you have decided to live with**, list the check under
+  `"skip"` for that site in the sites file (`{ "url": "salon.es", "skip": ["booking-link"] }`),
+  or leave a check out for every site with `--skip`. `--only` and `--profile` work here too.
+  A check that is left out drops out of the history, so bringing it back later reports its
+  finding as "first seen" once more.
+- **A failure is believed only after a second look.** A check that fails is run again two seconds
+  later, so a connection dropped at 06:00 does not become "worse" today and "better" tomorrow.
+  `--no-retry` turns that off.

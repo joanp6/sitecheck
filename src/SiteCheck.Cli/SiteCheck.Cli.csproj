@@ -4,7 +4,30 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>SiteCheck.Cli</RootNamespace>
     <AssemblyName>sitecheck</AssemblyName>
+    <Version>0.2.0</Version>
   </PropertyGroup>
+
+  <!--
+    Packaged as a .NET tool: `dotnet pack` makes a .nupkg that `dotnet tool install` turns into a
+    `sitecheck` command on the PATH, so using it does not need a checkout or `dotnet run`.
+  -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>sitecheck</ToolCommandName>
+    <PackageId>sitecheck</PackageId>
+    <Authors>joanp6</Authors>
+    <Description>Audits and monitors small-business websites: certificate, speed, mobile, broken links, security headers and more, in words a site's owner can act on.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/joanp6/sitecheck</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/joanp6/sitecheck</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>website;audit;monitoring;security;seo</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />

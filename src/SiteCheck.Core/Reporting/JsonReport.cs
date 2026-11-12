@@ -133,6 +133,12 @@ public static class JsonReport
         json.WriteString("url", report.Site.Url.AbsoluteUri);
         json.WriteString("checkedAt", report.CheckedAt);
         json.WriteString("verdict", StatusName(report.Verdict));
+
+        if (report.Grade is { } grade)
+        {
+            json.WriteString("grade", grade);
+        }
+
         json.WriteStartArray("results");
 
         foreach (var result in report.Results)

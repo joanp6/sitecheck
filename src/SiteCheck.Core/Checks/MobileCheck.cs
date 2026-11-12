@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using SiteCheck.Http;
 
 namespace SiteCheck.Checks;
 
@@ -53,12 +54,22 @@ public sealed class MobileCheck : ISiteCheck
                     $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}), so there was no page to check on a phone.");
             }
 
+            if (PageContent.SkipUnlessPage(response, "read the page to check it on a phone") is { } notAPage)
+            {
+                return notAPage;
+            }
+
             html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // HttpClient reports its own timeout as a cancellation. See LoadTimeCheck.
             return CheckOutcome.Fail($"The site did not respond within {_httpClient.Timeout.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s.");
+        }
+        catch (HttpRequestException ex) when (Refusal.In(ex) is { } refusal)
+        {
+            // sitecheck declined to read it. That is not a finding about the site.
+            return CheckOutcome.Error(refusal.Message);
         }
         catch (HttpRequestException ex)
         {

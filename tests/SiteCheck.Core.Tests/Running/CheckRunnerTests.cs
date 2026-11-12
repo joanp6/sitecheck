@@ -103,6 +103,159 @@ public sealed class CheckRunnerTests
         Assert.Equal(TimeSpan.FromSeconds(3), results[1].Duration);
     }
 
+    private static readonly CheckRetry OnceWithoutWaiting = new(Attempts: 2, Pause: TimeSpan.Zero);
+
+    [Theory]
+    [InlineData(CheckStatus.Fail)]
+    [InlineData(CheckStatus.Error)]
+    public async Task RunAsync_WhenBadNewsDoesNotRepeat_ReportsTheSecondLook(CheckStatus first)
+    {
+        // The dropped connection at 06:00: bad the first time, fine a moment later.
+        var check = StubCheck.ReturningInTurn("flaky", new CheckOutcome(first, "no answer"), CheckOutcome.Pass("ok"));
+        var runner = new CheckRunner([check], new FakeTimeProvider(), OnceWithoutWaiting);
+
+        var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Pass, results[0].Status);
+        Assert.Equal("ok", results[0].Detail);
+        Assert.Equal(2, check.Invocations);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenBadNewsRepeats_ReportsItAndStopsAsking()
+    {
+        var check = StubCheck.Returning("down", CheckOutcome.Fail("no answer"));
+        var runner = new CheckRunner([check], new FakeTimeProvider(), OnceWithoutWaiting);
+
+        var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Fail, results[0].Status);
+        Assert.Equal(2, check.Invocations);
+    }
+
+    [Theory]
+    [InlineData(CheckStatus.Pass)]
+    [InlineData(CheckStatus.Warn)]
+    [InlineData(CheckStatus.Skip)]
+    public async Task RunAsync_WhenTheVerdictIsNotBadNews_DoesNotAskTwice(CheckStatus status)
+    {
+        var check = StubCheck.Returning("settled", new CheckOutcome(status, "as it is"));
+        var runner = new CheckRunner([check], new FakeTimeProvider(), OnceWithoutWaiting);
+
+        await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, check.Invocations);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenACheckThrowsOnceAndThenWorks_ReportsTheSecondLook()
+    {
+        var runs = 0;
+        var check = StubCheck.Deciding("flaky", () => runs++ == 0 ? throw new IOException("reset") : CheckOutcome.Pass("ok"));
+        var runner = new CheckRunner([check], new FakeTimeProvider(), OnceWithoutWaiting);
+
+        var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CheckStatus.Pass, results[0].Status);
+    }
+
+    [Fact]
+    public async Task RunAsync_WaitsThePauseBeforeLookingAgain_AndCountsItInTheDuration()
+    {
+        var clock = new FakeTimeProvider();
+        var check = StubCheck.ReturningInTurn("flaky", CheckOutcome.Fail("no answer"), CheckOutcome.Pass("ok"));
+        var runner = new CheckRunner([check], clock, new CheckRetry(Attempts: 2, Pause: TimeSpan.FromSeconds(2)));
+
+        var running = runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        // Asked once, and now waiting on the clock rather than hammering the site again at once.
+        Assert.False(running.IsCompleted);
+        Assert.Equal(1, check.Invocations);
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        var results = await running;
+
+        Assert.Equal(2, check.Invocations);
+        Assert.Equal(TimeSpan.FromSeconds(2), results[0].Duration);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenCancelledDuringThePause_StopsInsteadOfLookingAgain()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var check = StubCheck.Returning("down", CheckOutcome.Fail("no answer"));
+        var runner = new CheckRunner([check], new FakeTimeProvider(), new CheckRetry(Attempts: 2, Pause: TimeSpan.FromMinutes(1)));
+
+        var running = runner.RunAsync(Site, cancellation.Token);
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
+        Assert.Equal(1, check.Invocations);
+    }
+
+    [Fact]
+    public async Task RunAsync_OnceEnoughChecksHaveFailedTwice_BelievesTheRestTheFirstTime()
+    {
+        // A site that is down fails everything. Two checks failing twice settles it here.
+        StubCheck[] checks = [.. Enumerable.Range(0, 4).Select(i => StubCheck.Returning($"down-{i}", CheckOutcome.Fail("no answer")))];
+        var runner = new CheckRunner(checks, new FakeTimeProvider(), new CheckRetry(Attempts: 2, Pause: TimeSpan.Zero, GiveUpAfter: 2));
+
+        var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal([2, 2, 1, 1], checks.Select(c => c.Invocations));
+        Assert.All(results, result => Assert.Equal(CheckStatus.Fail, result.Status));
+    }
+
+    [Fact]
+    public async Task RunAsync_ChecksThatRecoverOnTheSecondLook_DoNotUseUpTheSecondLooks()
+    {
+        // Only bad news that repeats says "it is the site". A blip that clears must leave the
+        // later checks their retry.
+        StubCheck[] checks =
+        [
+            StubCheck.ReturningInTurn("flaky-1", CheckOutcome.Fail("no answer"), CheckOutcome.Pass("ok")),
+            StubCheck.ReturningInTurn("flaky-2", CheckOutcome.Fail("no answer"), CheckOutcome.Pass("ok")),
+            StubCheck.ReturningInTurn("flaky-3", CheckOutcome.Fail("no answer"), CheckOutcome.Pass("ok")),
+        ];
+        var runner = new CheckRunner(checks, new FakeTimeProvider(), new CheckRetry(Attempts: 2, Pause: TimeSpan.Zero, GiveUpAfter: 1));
+
+        var results = await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.All(results, result => Assert.Equal(CheckStatus.Pass, result.Status));
+    }
+
+    [Fact]
+    public async Task RunAsync_StartsEverySiteWithItsSecondLooksIntact()
+    {
+        var check = StubCheck.Returning("down", CheckOutcome.Fail("no answer"));
+        var runner = new CheckRunner([check], new FakeTimeProvider(), new CheckRetry(Attempts: 2, Pause: TimeSpan.Zero, GiveUpAfter: 1));
+
+        await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+        await runner.RunAsync(new Uri("https://other.test/"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, check.Invocations);
+    }
+
+    [Fact]
+    public async Task RunAsync_ByDefault_RunsAFailingCheckOnce()
+    {
+        var check = StubCheck.Returning("down", CheckOutcome.Fail("no answer"));
+        var runner = new CheckRunner([check], new FakeTimeProvider());
+
+        await runner.RunAsync(Site, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, check.Invocations);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-1, 0)]
+    [InlineData(2, -1)]
+    public void CheckRetry_WithNoAttemptsOrANegativePause_Throws(int attempts, int pauseSeconds)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CheckRetry(attempts, TimeSpan.FromSeconds(pauseSeconds)));
+    }
+
     [Fact]
     public async Task RunAsync_WhenACheckThrows_RecordsAnErrorAndKeepsGoing()
     {

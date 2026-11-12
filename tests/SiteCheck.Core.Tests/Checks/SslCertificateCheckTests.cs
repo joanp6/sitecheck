@@ -31,6 +31,20 @@ public sealed class SslCertificateCheckTests
     }
 
     [Fact]
+    public async Task RunAsync_WhenTheAddressIsPrivateAndSitecheckDeclinesToOpenIt_IsAnErrorNotADefect()
+    {
+        var check = new SslCertificateCheck(
+            FakeCertificateProvider.Failing(new SiteCheck.Http.PrivateAddressException("intranet.test is at 10.0.0.5. Pass --allow-private.")),
+            new FakeTimeProvider(Now));
+
+        var outcome = await check.RunAsync(new Uri("https://intranet.test/"), TestContext.Current.CancellationToken);
+
+        // Nothing was learned about the site, so nothing is held against it.
+        Assert.Equal(CheckStatus.Error, outcome.Status);
+        Assert.Contains("--allow-private", outcome.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_WhenAnHttpOnlySiteHasNoHttpsAtAll_Fails()
     {
         var check = new SslCertificateCheck(

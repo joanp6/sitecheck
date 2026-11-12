@@ -3,11 +3,20 @@ namespace SiteCheck.Dns;
 /// <summary>The kinds of DNS record sitecheck asks for, by their number in the protocol.</summary>
 public enum DnsRecordType
 {
+    /// <summary>The IPv4 address a name leads to.</summary>
+    A = 1,
+
+    /// <summary>The other name this one is an alias for.</summary>
+    Cname = 5,
+
     /// <summary>Which servers receive the domain's mail.</summary>
     Mx = 15,
 
     /// <summary>Free text, where SPF and DMARC policies are published.</summary>
     Txt = 16,
+
+    /// <summary>The IPv6 address a name leads to.</summary>
+    Aaaa = 28,
 }
 
 /// <summary>What the DNS said about a name.</summary>
@@ -17,7 +26,8 @@ public enum DnsRecordType
 /// </param>
 /// <param name="Records">
 /// The records of the type asked for: a TXT record's text with its parts joined, as SPF and DMARC
-/// read it, or an MX record's mail server name. Empty when the name has none.
+/// read it, an MX record's mail server name, a CNAME's target, or an address as text. Empty when
+/// the name has none.
 /// </param>
 public sealed record DnsAnswer(bool NameExists, IReadOnlyList<string> Records);
 

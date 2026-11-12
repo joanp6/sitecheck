@@ -39,7 +39,9 @@ public sealed class DomainExpiryCheck : ISiteCheck
     private readonly DomainExpiryCheckOptions _options;
 
     // Fetched once per instance: auditing twenty sites should not download the bootstrap twenty
-    // times. Not synchronised, because CheckRunner never runs a check concurrently with itself.
+    // times. Behind a gate, because sites are audited in parallel and the first few would
+    // otherwise all find it missing at the same moment and each download it.
+    private readonly SemaphoreSlim _registriesGate = new(1, 1);
     private Dictionary<string, Uri>? _registries;
 
     public DomainExpiryCheck(HttpClient httpClient, TimeProvider timeProvider, DomainExpiryCheckOptions? options = null)
@@ -80,11 +82,11 @@ public sealed class DomainExpiryCheck : ISiteCheck
                 $"The site lives at an address on {platform}, which belongs to the hosting platform, so there is no domain of its own to renew.");
         }
 
-        _registries ??= await LoadRegistriesAsync(cancellationToken).ConfigureAwait(false);
+        var registries = await RegistriesAsync(cancellationToken).ConfigureAwait(false);
 
         var tld = labels[^1];
 
-        if (!_registries.TryGetValue(tld, out var registry))
+        if (!registries.TryGetValue(tld, out var registry))
         {
             return CheckOutcome.Skip(
                 $"The .{tld} registry does not publish expiry dates in a form that can be read automatically (RDAP). Check the date with whoever you registered the domain through.");
@@ -189,6 +191,27 @@ public sealed class DomainExpiryCheck : ISiteCheck
         using var document = await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return document.RootElement.Clone();
+    }
+
+    private async Task<Dictionary<string, Uri>> RegistriesAsync(CancellationToken cancellationToken)
+    {
+        if (_registries is { } loaded)
+        {
+            return loaded;
+        }
+
+        await _registriesGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            // Asked again inside the gate: whoever held it before us may have just filled it in.
+            // A download that fails leaves it empty, so the next site tries again.
+            return _registries ??= await LoadRegistriesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _registriesGate.Release();
+        }
     }
 
     private async Task<Dictionary<string, Uri>> LoadRegistriesAsync(CancellationToken cancellationToken)

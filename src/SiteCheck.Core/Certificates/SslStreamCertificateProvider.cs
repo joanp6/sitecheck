@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
+using SiteCheck.Http;
 
 namespace SiteCheck.Certificates;
 
@@ -25,10 +26,16 @@ public sealed class SslStreamCertificateProvider : ICertificateProvider
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
 
     private readonly TimeSpan _timeout;
+    private readonly bool _allowPrivateAddresses;
 
-    public SslStreamCertificateProvider(TimeSpan? timeout = null)
+    /// <param name="timeout">How long a host gets to finish the handshake.</param>
+    /// <param name="allowPrivateAddresses">
+    /// Also connect to this machine and private networks. Off by default; see <see cref="PublicNetworkGuard"/>.
+    /// </param>
+    public SslStreamCertificateProvider(TimeSpan? timeout = null, bool allowPrivateAddresses = false)
     {
         _timeout = timeout ?? DefaultTimeout;
+        _allowPrivateAddresses = allowPrivateAddresses;
 
         if (_timeout <= TimeSpan.Zero)
         {
@@ -37,6 +44,7 @@ public sealed class SslStreamCertificateProvider : ICertificateProvider
     }
 
     /// <exception cref="TimeoutException">The host did not finish the handshake within the timeout.</exception>
+    /// <exception cref="PrivateAddressException">The host is on a private network, and those were not allowed.</exception>
     public async Task<CertificateInfo> GetAsync(Uri url, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(url);
@@ -56,16 +64,17 @@ public sealed class SslStreamCertificateProvider : ICertificateProvider
         }
     }
 
-    private static async Task<CertificateInfo> ConnectAsync(Uri url, CancellationToken cancellationToken)
+    private async Task<CertificateInfo> ConnectAsync(Uri url, CancellationToken cancellationToken)
     {
-        using var tcpClient = new TcpClient();
-        await tcpClient.ConnectAsync(url.Host, url.Port, cancellationToken).ConfigureAwait(false);
+        // Through the guard, like every other connection: this one would otherwise be the way to
+        // ask whether something listens on a private address.
+        var socket = await PublicNetworkGuard.ConnectAsync(url.Host, url.Port, _allowPrivateAddresses, cancellationToken).ConfigureAwait(false);
 
         X509Certificate2? certificate = null;
         var policyErrors = SslPolicyErrors.None;
 
         using var sslStream = new SslStream(
-            tcpClient.GetStream(),
+            new NetworkStream(socket, ownsSocket: true),
             leaveInnerStreamOpen: false,
             (_, presented, _, errors) =>
             {

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using SiteCheck.Http;
 
 namespace SiteCheck.Checks;
 
@@ -87,6 +88,11 @@ public sealed class BrokenLinksCheck : ISiteCheck
                     $"The site answered {(int)response.StatusCode} ({response.ReasonPhrase}), so there was no page to check the links of.");
             }
 
+            if (PageContent.SkipUnlessPage(response, "read the page to check its links") is { } notAPage)
+            {
+                return notAPage;
+            }
+
             // After redirects, so relative links resolve against the page the visitor lands on.
             page = response.RequestMessage?.RequestUri ?? url;
             html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -95,6 +101,11 @@ public sealed class BrokenLinksCheck : ISiteCheck
         {
             // HttpClient reports its own timeout as a cancellation. See LoadTimeCheck.
             return CheckOutcome.Fail($"The site did not respond within {_httpClient.Timeout.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s.");
+        }
+        catch (HttpRequestException ex) when (Refusal.In(ex) is { } refusal)
+        {
+            // sitecheck declined to read it. That is not a finding about the site.
+            return CheckOutcome.Error(refusal.Message);
         }
         catch (HttpRequestException ex)
         {

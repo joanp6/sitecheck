@@ -1,4 +1,5 @@
 using System.Globalization;
+using SiteCheck.Http;
 
 namespace SiteCheck.Checks;
 
@@ -66,7 +67,14 @@ public sealed class LoadTimeCheck : ISiteCheck
 
             // Drain the body before stopping the clock: headers can arrive quickly in
             // front of a page that then takes seconds to finish streaming.
-            _ = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            // Read and thrown away rather than kept: only the time matters here, and holding the
+            // body would let an address that serves gigabytes fill memory.
+            var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (body.ConfigureAwait(false))
+            {
+                await body.CopyToAsync(Stream.Null, cancellationToken).ConfigureAwait(false);
+            }
 
             var elapsed = _timeProvider.GetElapsedTime(startedAt);
 
@@ -80,6 +88,11 @@ public sealed class LoadTimeCheck : ISiteCheck
             // indistinguishable from the site being down, so it is the site's failure, unless the
             // headers already said the site turns robots away: then nobody timed a visitor's page.
             return BlockedRobot(statusCode) ?? CheckOutcome.Fail($"The site did not respond within {Seconds(_httpClient.Timeout)}.") with { StatusCode = statusCode };
+        }
+        catch (HttpRequestException ex) when (Refusal.In(ex) is { } refusal)
+        {
+            // sitecheck declined to read it. That is not a finding about the site.
+            return CheckOutcome.Error(refusal.Message);
         }
         catch (HttpRequestException ex)
         {
