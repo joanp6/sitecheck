@@ -4,6 +4,7 @@ using SiteCheck.Dns;
 using SiteCheck.Http;
 using SiteCheck.Running;
 using SiteCheck.Sites;
+using SiteCheck.Tls;
 
 namespace SiteCheck.Cli;
 
@@ -24,6 +25,10 @@ internal sealed class SiteChecks : IDisposable
     /// Adds <see cref="PageSpeedCheck"/>, which sends each address to Google and takes up to a
     /// minute per site, so it only runs when asked for.
     /// </param>
+    /// <param name="includeExposedFiles">
+    /// Adds <see cref="ExposedFilesCheck"/>, which asks the site for files no visitor would, so it
+    /// only runs when asked for.
+    /// </param>
     /// <param name="allowPrivate">
     /// Also connect to this machine and private networks, for auditing a site of your own that is
     /// not on the internet. Off by default; see <see cref="PublicNetworkGuard"/>.
@@ -31,7 +36,7 @@ internal sealed class SiteChecks : IDisposable
     /// <param name="retry">
     /// Run a check that fails or errors once more before believing it. On by default; see <see cref="CheckRetry"/>.
     /// </param>
-    public SiteChecks(bool includePageSpeed = false, bool allowPrivate = false, bool retry = true)
+    public SiteChecks(bool includePageSpeed = false, bool includeExposedFiles = false, bool allowPrivate = false, bool retry = true)
     {
         // Every check that reads the page shares one download of it. See PageSnapshotHandler.
         _snapshots = new PageSnapshotHandler(CreateHandler(allowPrivate));
@@ -69,7 +74,20 @@ internal sealed class SiteChecks : IDisposable
             new SharePreviewCheck(_httpClient),
             new BookingLinkCheck(_httpClient),
             new CopyrightYearCheck(_httpClient, TimeProvider.System),
+            new SecurityHeadersCheck(_httpClient),
+            new CookiesCheck(_httpClient),
+            new InfoLeakCheck(_httpClient),
+            new SubresourceIntegrityCheck(_httpClient),
+            new CmsVersionCheck(_httpClient),
+            new TlsConfigCheck(new RawTlsProbe(allowPrivate)),
+            new WwwAddressCheck(new UdpDnsResolver()),
         ];
+
+        // Asks for files no visitor would, which a firewall may take for an attack. See ExposedFilesCheck.
+        if (includeExposedFiles)
+        {
+            checks.Add(new ExposedFilesCheck(_httpClient));
+        }
 
         if (includePageSpeed)
         {

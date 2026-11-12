@@ -44,7 +44,15 @@ public sealed class CheckNameTests : IDisposable
             new SharePreviewCheck(_httpClient),
             new BookingLinkCheck(_httpClient),
             new CopyrightYearCheck(_httpClient, TimeProvider.System),
+            new SecurityHeadersCheck(_httpClient),
+            new CookiesCheck(_httpClient),
+            new InfoLeakCheck(_httpClient),
+            new SubresourceIntegrityCheck(_httpClient),
+            new CmsVersionCheck(_httpClient),
+            new TlsConfigCheck(new FakeTlsProbe()),
+            new WwwAddressCheck(new FakeDnsResolver()),
             new PageSpeedCheck(_httpClient, apiKey: null),
+            new ExposedFilesCheck(_httpClient),
         ];
 
     public void Dispose() => _httpClient.Dispose();

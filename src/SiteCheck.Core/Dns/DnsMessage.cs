@@ -1,3 +1,4 @@
+using System.Net;
 using System.Buffers.Binary;
 using System.Text;
 
@@ -138,6 +139,10 @@ public static class DnsMessage
                 {
                     DnsRecordType.Txt => ReadText(message.Slice(data, length)),
                     DnsRecordType.Mx => ReadName(message, data + 2),
+                    DnsRecordType.Cname => ReadName(message, data),
+                    DnsRecordType.A when length == 4 => new IPAddress(message.Slice(data, length)).ToString(),
+                    DnsRecordType.Aaaa when length == 16 => new IPAddress(message.Slice(data, length)).ToString(),
+                    DnsRecordType.A or DnsRecordType.Aaaa => throw new FormatException("A DNS address record is not the size of an address."),
                     _ => throw new FormatException($"Record type {type} is not one sitecheck reads."),
                 });
             }

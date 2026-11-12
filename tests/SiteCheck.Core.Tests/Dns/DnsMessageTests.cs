@@ -66,6 +66,35 @@ public sealed class DnsMessageTests
     }
 
     [Fact]
+    public void Decode_ReadsAddressRecordsAsText()
+    {
+        byte[] v4 = [203, 0, 113, 7];
+        byte[] v6 = [0x20, 0x01, 0x0D, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7];
+
+        Assert.Equal(["203.0.113.7"], DnsMessage.Decode(Response(1, 0, DnsRecordType.A, v4), DnsRecordType.A).Records);
+        Assert.Equal(["2001:db8::7"], DnsMessage.Decode(Response(1, 0, DnsRecordType.Aaaa, v6), DnsRecordType.Aaaa).Records);
+    }
+
+    [Fact]
+    public void Decode_RejectsAnAddressRecordOfTheWrongSize()
+    {
+        byte[] threeBytes = [203, 0, 113];
+
+        Assert.Throws<FormatException>(() => DnsMessage.Decode(Response(1, 0, DnsRecordType.A, threeBytes), DnsRecordType.A));
+    }
+
+    [Fact]
+    public void Decode_ReadsTheNameAnAliasPointsAt()
+    {
+        // www, then "salon.test" by pointing back at the question's name (offset 12).
+        byte[] target = [3, (byte)'w', (byte)'w', (byte)'w', 0xC0, 12];
+
+        var decoded = DnsMessage.Decode(Response(1, 0, DnsRecordType.Cname, target), DnsRecordType.Cname);
+
+        Assert.Equal(["www.salon.test"], decoded.Records);
+    }
+
+    [Fact]
     public void Decode_KeepsOnlyTheTypeAskedFor()
     {
         // A CNAME in the answer section, as a resolver sends on the way to the real record.

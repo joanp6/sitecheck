@@ -57,7 +57,14 @@ var noRetryOption = new Option<bool>("--no-retry")
         + "Faster against a site you already know is down.",
 };
 
-var concurrencyOption = new Option<int>("--concurrency")
+var exposedFilesOption = new Option<bool>("--exposed-files")
+{
+    Description = "Also ask each site for files that should never be public: source history (.git), configuration (.env), "
+        + "database dumps and backups. Makes about 16 requests no visitor would, which a firewall may take for an attack, "
+        + "so use it on sites you look after or have been asked to look at.",
+};
+
+var concurrencyOption =new Option<int>("--concurrency")
 {
     Description = "How many sites to audit at the same time. Sites on the same host are never audited together, "
         + "and the checks of one site always run in order. 1 audits the sites one after another.",
@@ -81,6 +88,7 @@ var audit = new Command("audit", "Audit one or more sites once and report what w
     allowPrivateOption,
     noRetryOption,
     concurrencyOption,
+    exposedFilesOption,
 };
 
 audit.SetAction(async (parse, cancellationToken) =>
@@ -92,7 +100,7 @@ audit.SetAction(async (parse, cancellationToken) =>
         return ExitCodes.Usage;
     }
 
-    using var checks = new SiteChecks(includePageSpeed: parse.GetValue(pageSpeedOption), allowPrivate: parse.GetValue(allowPrivateOption), retry: !parse.GetValue(noRetryOption));
+    using var checks = new SiteChecks(includePageSpeed: parse.GetValue(pageSpeedOption), includeExposedFiles: parse.GetValue(exposedFilesOption), allowPrivate: parse.GetValue(allowPrivateOption), retry: !parse.GetValue(noRetryOption));
 
     try
     {
@@ -138,6 +146,7 @@ var watch = new Command(
     allowPrivateOption,
     noRetryOption,
     concurrencyOption,
+    exposedFilesOption,
 };
 
 watch.SetAction(async (parse, cancellationToken) =>
@@ -165,7 +174,7 @@ watch.SetAction(async (parse, cancellationToken) =>
         return ExitCodes.Usage;
     }
 
-    using var checks = new SiteChecks(allowPrivate: parse.GetValue(allowPrivateOption), retry: !parse.GetValue(noRetryOption));
+    using var checks = new SiteChecks(includeExposedFiles: parse.GetValue(exposedFilesOption), allowPrivate: parse.GetValue(allowPrivateOption), retry: !parse.GetValue(noRetryOption));
 
     try
     {

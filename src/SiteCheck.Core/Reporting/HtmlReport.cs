@@ -41,6 +41,14 @@ public static class HtmlReport
         ["share-preview"] = "Preview when shared, and icon",
         ["booking-link"] = "Online booking and map",
         ["copyright-year"] = "Copyright year",
+        ["security-headers"] = "Browser protections",
+        ["exposed-files"] = "Leftover files on the server",
+        ["cookies"] = "Cookies",
+        ["info-leak"] = "What the server says about itself",
+        ["sri"] = "Scripts from other servers",
+        ["cms-version"] = "What the site is built with",
+        ["tls-config"] = "Encryption versions",
+        ["www-address"] = "With and without www",
         ["pagespeed"] = "Real-world speed (Google)",
     };
 
